@@ -18,6 +18,9 @@ async function releaseCommand(argv) {
     console.log(result.summary);
     for (const check of result.checks) {
       console.log(`- ${check.name}: ${check.ok ? 'pass' : 'fail'}${check.errors ? ` (${check.errors} error${check.errors === 1 ? '' : 's'})` : ''}`);
+      if (!check.ok && check.details) {
+        console.log(`  details:\n${indentDetails(check.details)}`);
+      }
     }
   }
   if (!result.ok) process.exitCode = 1;
@@ -25,6 +28,11 @@ async function releaseCommand(argv) {
 
 function normalizeDashes(argv) {
   return argv.map((item) => String(item).replace(/^–/, '--'));
+}
+
+function indentDetails(details) {
+  const text = Array.isArray(details) ? details.join('\n') : String(details || '');
+  return text.split(/\r?\n/).map((line) => `    ${line}`).join('\n');
 }
 
 module.exports = {

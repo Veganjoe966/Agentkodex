@@ -49,7 +49,7 @@ function run(name, cwd, command, args, options = {}) {
     exitCode: result.status,
     errors: result.status === 0 ? 0 : 1,
     warnings: 0,
-    details: tail(redactSecrets(`${result.stdout || ''}${result.stderr || ''}`), 1200),
+    details: commandDetails(`${result.stdout || ''}${result.stderr || ''}`, result.status),
   };
 }
 
@@ -193,6 +193,24 @@ function hasScript(root, name) {
 function tail(value, max) {
   const text = String(value || '');
   return text.length > max ? text.slice(text.length - max) : text;
+}
+
+function commandDetails(output, status) {
+  const text = redactSecrets(output);
+  if (status === 0) return tail(text, 1200);
+  const lines = text.split(/\r?\n/);
+  const picked = [];
+  const seen = new Set();
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!/(?:^not ok\b|AssertionError|ERR_|Error:|# fail [1-9]|# failed)/.test(lines[i])) continue;
+    for (let j = Math.max(0, i - 6); j <= Math.min(lines.length - 1, i + 18); j += 1) {
+      if (seen.has(j)) continue;
+      seen.add(j);
+      picked.push(lines[j]);
+    }
+  }
+  const summary = picked.length ? `${picked.join('\n')}\n\n--- output tail ---\n` : '';
+  return tail(`${summary}${tail(text, 5000)}`, 8000);
 }
 
 function escapeRegExp(value) {

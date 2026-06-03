@@ -1,65 +1,66 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="520" viewBox="0 0 1280 520" role="img" aria-label="Agentkodex CLI-native agent operations runtime">
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="520" viewBox="0 0 1280 520" role="img" aria-label="Agentkodex chat-first control plane for AI coding agents">
   <defs>
     <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
-      <stop offset="0" stop-color="#05070d"/>
-      <stop offset="0.48" stop-color="#0d1220"/>
-      <stop offset="1" stop-color="#07111a"/>
+      <stop offset="0" stop-color="#07111f"/>
+      <stop offset="0.48" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#06151a"/>
     </linearGradient>
-    <linearGradient id="edge" x1="0" x2="1">
+    <linearGradient id="line" x1="0" x2="1">
       <stop offset="0" stop-color="#22d3ee"/>
-      <stop offset="0.52" stop-color="#a78bfa"/>
+      <stop offset="0.5" stop-color="#38bdf8"/>
       <stop offset="1" stop-color="#34d399"/>
     </linearGradient>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="7" result="blur"/>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
       <feMerge>
         <feMergeNode in="blur"/>
         <feMergeNode in="SourceGraphic"/>
       </feMerge>
     </filter>
   </defs>
-  <rect width="1280" height="520" rx="34" fill="url(#bg)"/>
-  <path d="M0 398 C180 320 285 470 454 386 C628 300 735 402 886 316 C1054 220 1130 282 1280 188 L1280 520 L0 520 Z" fill="#0f172a" opacity="0.68"/>
-  <path d="M46 70 H1234" stroke="url(#edge)" stroke-width="2" opacity="0.75"/>
-  <path d="M46 450 H1234" stroke="url(#edge)" stroke-width="2" opacity="0.55"/>
-  <g opacity="0.2" stroke="#93c5fd">
-    <path d="M122 116 H1150"/>
-    <path d="M122 164 H1150"/>
-    <path d="M122 212 H1150"/>
-    <path d="M122 260 H1150"/>
-    <path d="M122 308 H1150"/>
+  <rect width="1280" height="520" rx="36" fill="url(#bg)"/>
+  <path d="M52 82 H1228" stroke="url(#line)" stroke-width="2" opacity="0.8"/>
+  <path d="M52 438 H1228" stroke="url(#line)" stroke-width="2" opacity="0.55"/>
+  <g opacity="0.14" stroke="#93c5fd">
+    <path d="M96 130 H1184"/>
+    <path d="M96 178 H1184"/>
+    <path d="M96 226 H1184"/>
+    <path d="M96 274 H1184"/>
+    <path d="M96 322 H1184"/>
+    <path d="M96 370 H1184"/>
   </g>
-  <g transform="translate(76 86)">
-    <rect x="0" y="0" width="410" height="282" rx="18" fill="#030712" stroke="#334155"/>
-    <circle cx="29" cy="28" r="7" fill="#ef4444"/>
-    <circle cx="52" cy="28" r="7" fill="#f59e0b"/>
-    <circle cx="75" cy="28" r="7" fill="#22c55e"/>
-    <text x="28" y="76" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22" fill="#67e8f9">$ agentkodex run</text>
-    <text x="28" y="116" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18" fill="#cbd5e1">runtime: v2 pty session</text>
-    <text x="28" y="150" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18" fill="#cbd5e1">capability: ed25519 ok</text>
-    <text x="28" y="184" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18" fill="#cbd5e1">quality: passed</text>
-    <text x="28" y="218" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18" fill="#cbd5e1">audit: bundle verified</text>
-    <text x="28" y="252" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18" fill="#34d399">status: controlled</text>
+  <g transform="translate(72 116)">
+    <rect width="452" height="292" rx="20" fill="#020617" stroke="#334155"/>
+    <rect x="0.5" y="0.5" width="451" height="291" rx="19.5" fill="none" stroke="#0f172a"/>
+    <circle cx="32" cy="30" r="7" fill="#ef4444"/>
+    <circle cx="56" cy="30" r="7" fill="#f59e0b"/>
+    <circle cx="80" cy="30" r="7" fill="#22c55e"/>
+    <text x="30" y="78" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22" fill="#67e8f9">$ agentkodex ask</text>
+    <text x="30" y="118" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18" fill="#e2e8f0">"Fix failing tests"</text>
+    <text x="30" y="164" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" fill="#94a3b8">strategy: confidence 94%</text>
+    <text x="30" y="198" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" fill="#94a3b8">agent: codex cli</text>
+    <text x="30" y="232" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" fill="#94a3b8">gates: passed</text>
+    <text x="30" y="266" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" fill="#34d399">winner returned</text>
   </g>
-  <g transform="translate(548 92)">
-    <text x="0" y="52" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="78" font-weight="800" fill="#f8fafc" filter="url(#glow)">AGENTKODEX</text>
-    <text x="4" y="100" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="26" fill="#a5f3fc">CLI-native control plane for coding agents</text>
-    <g transform="translate(4 145)" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="18" fill="#dbeafe">
-      <rect x="0" y="0" width="176" height="42" rx="21" fill="#0f172a" stroke="#38bdf8"/>
-      <text x="22" y="27">Runtime v2</text>
-      <rect x="194" y="0" width="174" height="42" rx="21" fill="#0f172a" stroke="#a78bfa"/>
-      <text x="218" y="27">Agentguard</text>
-      <rect x="386" y="0" width="152" height="42" rx="21" fill="#0f172a" stroke="#34d399"/>
-      <text x="413" y="27">Lintguard</text>
+  <g transform="translate(584 118)">
+    <text x="0" y="50" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="76" font-weight="800" fill="#f8fafc" filter="url(#soft)">AGENTKODEX</text>
+    <text x="4" y="98" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="26" fill="#a5f3fc">Chat-first control plane for AI coding agents</text>
+    <g transform="translate(4 142)" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="18" fill="#dbeafe">
+      <rect x="0" y="0" width="132" height="42" rx="10" fill="#0f172a" stroke="#38bdf8"/>
+      <text x="31" y="27">Setup</text>
+      <rect x="150" y="0" width="112" height="42" rx="10" fill="#0f172a" stroke="#34d399"/>
+      <text x="186" y="27">Ask</text>
+      <rect x="280" y="0" width="116" height="42" rx="10" fill="#0f172a" stroke="#a78bfa"/>
+      <text x="315" y="27">Chat</text>
     </g>
     <g transform="translate(4 218)" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18">
-      <text x="0" y="0" fill="#94a3b8">persistent terminals -> signed capabilities -> gates -> audits -> routing</text>
-      <text x="0" y="38" fill="#67e8f9">npm install -g agentkodex@latest</text>
+      <text x="0" y="0" fill="#cbd5e1">ready agents -> strategy -> gates -> evidence</text>
+      <text x="0" y="40" fill="#67e8f9">npm install -g agentkodex</text>
     </g>
   </g>
-  <g transform="translate(1010 320)" opacity="0.92">
-    <rect x="0" y="0" width="192" height="82" rx="14" fill="#020617" stroke="#475569"/>
-    <text x="24" y="34" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="18" fill="#f8fafc">audit verified</text>
-    <text x="24" y="60" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#34d399">sha256 ok</text>
+  <g transform="translate(914 328)">
+    <rect width="226" height="78" rx="14" fill="#020617" stroke="#475569"/>
+    <text x="24" y="33" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" fill="#f8fafc">audit trail saved</text>
+    <text x="24" y="58" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" fill="#34d399">cache + replay ready</text>
   </g>
 </svg>

@@ -22,4 +22,25 @@ jobs:
         run: npm install
 
       - name: Release gate
-        run: npm run release:gate
+        run: |
+          npm run release:gate || {
+            status=$?
+            echo "::group::quality gate logs"
+            for file in .agentkodex/quality-gate/*.log; do
+              [ -f "$file" ] || continue
+              echo "===== $file ====="
+              tail -n 220 "$file"
+            done
+            echo "::endgroup::"
+            exit "$status"
+          }
+
+      - name: Upload release diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-gate-diagnostics
+          path: |
+            .agentkodex/quality-gate/*.log
+            .agentkodex/quality-gate/*.json
+          if-no-files-found: ignore
