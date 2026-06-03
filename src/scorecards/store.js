@@ -32,6 +32,13 @@ function recordAgentRun(root, agent, task, metrics) {
   card.durationSamples += metrics.durationMs ? 1 : 0;
   card.totalGatePasses += Number(metrics.gatePassCount || 0);
   card.totalGateFailures += Number(metrics.gateFailCount || 0);
+  card.securityDeniedCount += Number(metrics.securityDeniedCount || 0);
+  if (metrics.qualityGateOk !== null && metrics.qualityGateOk !== undefined) {
+    card.qualitySamples += 1;
+    if (metrics.qualityGateOk) card.qualityPasses += 1;
+  }
+  card.qualityViolationCount += Number(metrics.qualityViolationCount || 0);
+  if (metrics.completionBlocked) card.completionBlockedCount += 1;
   if (metrics.repairLoops !== null && metrics.repairLoops !== undefined) {
     card.totalRepairLoops += Number(metrics.repairLoops || 0);
     card.repairLoopSamples += 1;
@@ -66,6 +73,13 @@ function mergeMetric(scorecards, agent, task, metrics) {
   card.durationSamples += metrics.durationMs ? 1 : 0;
   card.totalGatePasses += Number(metrics.gatePassCount || 0);
   card.totalGateFailures += Number(metrics.gateFailCount || 0);
+  card.securityDeniedCount += Number(metrics.securityDeniedCount || 0);
+  if (metrics.qualityGateOk !== null && metrics.qualityGateOk !== undefined) {
+    card.qualitySamples += 1;
+    if (metrics.qualityGateOk) card.qualityPasses += 1;
+  }
+  card.qualityViolationCount += Number(metrics.qualityViolationCount || 0);
+  if (metrics.completionBlocked) card.completionBlockedCount += 1;
   const category = inferTaskCategory(task);
   card.taskCategories[category] = (card.taskCategories[category] || 0) + 1;
   card.lastMetrics = metrics;
@@ -87,6 +101,14 @@ function emptyCard(agent) {
     totalGateFailures: 0,
     totalRepairLoops: 0,
     repairLoopSamples: 0,
+    securityAllowed: true,
+    securityDeniedCount: 0,
+    qualityGateOk: null,
+    qualityPasses: 0,
+    qualitySamples: 0,
+    qualityViolationCount: 0,
+    completionBlocked: false,
+    completionBlockedCount: 0,
     taskCategories: {},
     cost: { total: null, average: null, samples: 0 },
     lastMetrics: null,
@@ -101,6 +123,9 @@ function finalizeCard(card) {
     gatePassRate: gateTotal ? card.totalGatePasses / gateTotal : null,
     avgDurationMs: card.durationSamples ? Math.round(card.totalDurationMs / card.durationSamples) : null,
     avgRepairLoops: card.repairLoopSamples ? card.totalRepairLoops / card.repairLoopSamples : null,
+    securityAllowed: card.securityDeniedCount === 0,
+    qualityGateOk: card.qualitySamples ? card.qualityPasses === card.qualitySamples : null,
+    completionBlocked: card.completionBlockedCount > 0,
     insufficientHistory: card.runs === 0,
     updatedAt: new Date().toISOString(),
   };

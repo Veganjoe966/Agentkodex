@@ -4,6 +4,14 @@
   "description": "CLI-native agent harness with persistent Runtime v2 sessions and local Cockpit UI.",
   "license": "MIT",
   "type": "commonjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Veganjoe966/Agentkodex.git"
+  },
+  "homepage": "https://github.com/Veganjoe966/Agentkodex#readme",
+  "bugs": {
+    "url": "https://github.com/Veganjoe966/Agentkodex/issues"
+  },
   "bin": {
     "agentkodex": "bin/agentkodex.js"
   },

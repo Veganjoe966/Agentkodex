@@ -8,9 +8,8 @@ const { discoverProject, selectCommands } = require('../discovery');
 const { loadConfig, saveDiscovery, createRun, updateRunStatus, kodexPath, loadErrors, learnFromGateFailures } = require('../kodexStore');
 const { getAgent, detectAgent, buildAgentCommand } = require('../agents');
 const { createTaskBrief, createPlan, createMissionPrompt, createReleaseNotes } = require('../prompts');
-const { createSession, getSession, listSessions, patchSession, resolveSessionId, readApprovals, isPidAlive } = require('./sessionStore');
+const { createSession, getSession, listSessions, patchSession, resolveSessionId, readApprovals, isPidAlive, newSessionId } = require('./sessionStore');
 const { readText, writeJson, writeText, exists, ensureDir, hashString, slugify } = require('../utils');
-const { authorizeCommand } = require('../authorization');
 const { runCommand } = require('../sessionRunner');
 const { scanDiff, renderSecurityReport } = require('../security');
 const { createQaReport, renderQaReport, decideFinalStatus } = require('../run');
@@ -18,6 +17,8 @@ const { summarizeCommandResult, tail } = require('../commandResult');
 const { spawnSync } = require('child_process');
 const { withSessionToken } = require('./controlToken');
 const { runLintguardGate } = require('../lintguard/gate');
+const { runQualityGateAsGate } = require('../gates/qualityGate');
+const { prepareRuntimeSecurity } = require('./sessionSecurity');
 
 async function startAgentSession(options) {
   const root = path.resolve(options.root || process.cwd());
@@ -31,7 +32,6 @@ async function startAgentSession(options) {
   const yes = Boolean(options.yes);
   const pty = Boolean(options.pty);
   const closeStdinAfterInitial = Boolean(options.closeStdinAfterInitial);
-
   const run = createRun(root, task);
   updateRunStatus(run.dir, { status: 'session_preparing', agent: agentId, mode, gates, runtime: 'cockpit' });
 
@@ -53,26 +53,31 @@ async function startAgentSession(options) {
 
   const { command, detection, stdin } = await resolveSessionCommand({ root, runDir: run.dir, config, agentId, task, missionPrompt, promptFile, options });
   const trustedAgentLaunch = Boolean(detection.trustedLaunch && !options.command);
-  const policy = authorizeCommand(command, {
+  const sessionId = options.sessionId || newSessionId(`${agentId}:${task}`);
+  const security = prepareRuntimeSecurity({
     root,
+    runDir: run.dir,
+    sessionId,
+    agentId,
+    command,
     mode,
     yes,
-    agentLaunch: trustedAgentLaunch,
-    intent: task,
-    holder: run.id,
-    agent: agentId,
+    task,
+    trustedAgentLaunch,
     adapterKind: detection.kind || detection.adapterKind,
     config,
+    cwd: root,
   });
-  writeJson(path.join(run.dir, 'session-command.json'), { agent: agentId, command, detection, stdin, policy });
-
+  const { policy, securityDecision, capability } = security;
+  writeJson(path.join(run.dir, 'session-command.json'), { agent: agentId, command, detection, stdin, policy, securityDecision, capability });
   if (!policy.allowed) {
-    updateRunStatus(run.dir, { status: policy.requiresApproval ? 'session_blocked_approval' : 'session_blocked_policy', policy });
+    updateRunStatus(run.dir, { status: policy.requiresApproval ? 'session_blocked_approval' : 'session_blocked_policy', policy, securityDecision });
     if (!policy.requiresApproval) throw new Error(`Blocked by policy: ${policy.reason}`);
     throw new Error(`Command requires approval before session start: ${policy.reason}. Re-run with --yes, --mode sandbox_auto, or configure a safer command.`);
   }
 
   const session = createSession(root, {
+    id: sessionId,
     runId: run.id,
     runDir: run.dir,
     task,
@@ -82,6 +87,8 @@ async function startAgentSession(options) {
     cwd: root,
     command,
     policy,
+    securityDecision,
+    capabilities: { runtime: capability },
     pty,
     initialInputFile: stdin && options.noInitialPrompt !== true ? promptFile : null,
     closeStdinAfterInitial,
@@ -238,6 +245,10 @@ async function finalizeSession(root, idOrLast = 'last', options = {}) {
     const gateCommand = selectedCommands[index];
     if (gateCommand.gate === 'lintguard') {
       gateResults.push(await runLintguardGate(root, gateOutputDir, { mode, yes, timeoutMs }));
+      continue;
+    }
+    if (gateCommand.gate === 'quality') {
+      gateResults.push(await runQualityGateAsGate(root, gateOutputDir, { mode, yes, timeoutMs }));
       continue;
     }
     if (gateCommand.skipped) {

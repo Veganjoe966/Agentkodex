@@ -14,6 +14,35 @@ agentkodex/
 
 Agentkodex does not vendor Lintguard or Agentguard into one large runtime. It calls them through small adapters and records their evidence under `.agentkodex/`.
 
+## Capability Enforcement
+
+Agentguard-scoped capabilities are issued by Agentkodex through `src/capabilities/` and verified at command launch boundaries. A capability has this shape:
+
+```json
+{
+  "capabilityId": "cap_...",
+  "sessionId": "sess_...",
+  "agentId": "shell",
+  "phase": "runtime",
+  "allowedActions": ["command:start"],
+  "allowedPaths": ["/repo"],
+  "expiresAt": "2026-06-03T00:00:00.000Z",
+  "issuedBy": "agentguard",
+  "signature": "..."
+}
+```
+
+Checks are not helper-only. They sit directly before process execution in:
+
+- `src/sessionRunner.js` for one-shot, custom, shell, and configured agent commands
+- `src/runtime/supervisor.js` for Runtime v2 per-session process spawn
+- `src/runtime/daemonServer.js` for daemon-managed Runtime v2 process spawn
+- `src/swarm/run.js` for per-agent/per-phase swarm execution
+- `src/tournament/index.js` for per-contestant tournament execution
+- `src/audit/bundle.js` for audit helper `git` and `zip` subprocesses
+
+Failed capability validation writes audit evidence before returning.
+
 ## Quality Gate
 
 The canonical quality gate is:
@@ -66,6 +95,7 @@ Current checks:
 - architecture hygiene for checked-in env files and forbidden imports
 
 Command checks run real project commands. Non-zero exits fail the gate. LOC and architecture checks run locally and do not need external packages.
+Quality gate results are written to audit evidence and copied into audit bundles when attached to a run.
 
 Lintguard remains available as an optional sidecar or local adapter:
 
@@ -105,6 +135,7 @@ It returns:
 ```
 
 The gate is deny-by-default for unknown dangerous actions and blocked commands. Command authorization reuses Agentkodex policy plus the Agentguard JSON bridge when Agentguard is available.
+Security decisions, denied actions, and failed capability checks are written to `.agentkodex/audit/evidence.jsonl` and run-local `audit-evidence.jsonl` when a run directory is available.
 
 ## Agent Workflow
 
@@ -155,7 +186,7 @@ The integration must not add:
 Next integration step:
 
 1. Move Lintguard architecture rules into a reusable rule pack.
-2. Add Agentguard signed task capabilities for each agent phase.
-3. Record quality/security gate evidence in audit bundles by default.
+2. Move capability signing from the Node compatibility signer to first-class Python Agentguard token verification when running with Agentguard installed.
+3. Expand evidence bundle rendering with a human-readable security timeline.
 4. Add dependency hygiene, circular dependency, and dead import checks.
 5. Feed quality/security outcomes into routing scorecards.

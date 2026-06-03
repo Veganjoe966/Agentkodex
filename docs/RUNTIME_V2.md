@@ -84,6 +84,8 @@ Agentkodex Node runtime
 
 Agentguard evidence is written to `.agentkodex/runtime/agentguard-audit.jsonl`, and the default capability policy is created at `.agentkodex/agentguard-policy.yaml`.
 
+Runtime v2 also stores scoped execution capabilities in session metadata. The supervisor verifies the capability immediately before spawning the command. A daemon request without a valid matching capability is rejected even if the local daemon token is valid.
+
 ## Cockpit workflow
 
 ```bash
@@ -125,6 +127,7 @@ Run bundle:
 .agentkodex/runs/<run-id>/qa-report.md
 .agentkodex/runs/<run-id>/security-report.md
 .agentkodex/runs/<run-id>/final-report.md
+.agentkodex/runs/<run-id>/audit-evidence.jsonl
 ```
 
 Audit bundle:

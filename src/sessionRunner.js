@@ -7,6 +7,8 @@ const { spawn } = require('child_process');
 const { appendText, ensureDir, shellQuote, writeText } = require('./utils');
 const { redactSecrets } = require('./policy');
 const { authorizeCommand } = require('./authorization');
+const { verifyExecutionCapability } = require('./capabilities/execution');
+const { writeAuditEvidence } = require('./audit/evidence');
 
 function commandExists(commandName) {
   return new Promise((resolve) => {
@@ -58,6 +60,7 @@ async function runCommand(command, options = {}) {
   const displayCommand = redactSecrets(command);
   appendText(policyFile, `${new Date().toISOString()} ${JSON.stringify({ command: displayCommand, policy })}\n`);
   if (!policy.allowed) {
+    writeAuditEvidence(cwd, { type: 'denied_action', allowed: false, reason: policy.reason, command: displayCommand, policy }, { runDir: logDir });
     const result = {
       command: displayCommand,
       cwd,
@@ -76,6 +79,20 @@ async function runCommand(command, options = {}) {
     appendText(transcriptFile, `\n$ ${displayCommand}\n[POLICY] ${policy.reason}\n`);
     if (outputFile) appendText(outputFile, `$ ${displayCommand}\n[POLICY] ${policy.reason}\n`);
     if (echo) console.error(`[policy] ${policy.reason}: ${displayCommand}`);
+    return result;
+  }
+
+  const capability = verifyExecutionCapability(cwd, command, {
+    ...options,
+    cwd,
+    logDir,
+  }, policy);
+  if (!capability.allowed) {
+    const result = deniedCommandResult(command, displayCommand, cwd, capability, policy);
+    appendText(commandsFile, `${JSON.stringify(safeCommandRecord(result))}\n`);
+    appendText(transcriptFile, `\n$ ${displayCommand}\n[CAPABILITY] ${capability.reason}\n`);
+    if (outputFile) appendText(outputFile, `$ ${displayCommand}\n[CAPABILITY] ${capability.reason}\n`);
+    if (echo) console.error(`[capability] ${capability.reason}: ${displayCommand}`);
     return result;
   }
 
@@ -159,6 +176,24 @@ async function runCommand(command, options = {}) {
       resolve(result);
     });
   });
+}
+
+function deniedCommandResult(command, displayCommand, cwd, capability, policy) {
+  return {
+    command: displayCommand || redactSecrets(command),
+    cwd,
+    startedAt: new Date().toISOString(),
+    endedAt: new Date().toISOString(),
+    exitCode: null,
+    signal: null,
+    timedOut: false,
+    skipped: true,
+    policy,
+    capability,
+    stdout: '',
+    stderr: capability.reason,
+    durationMs: 0,
+  };
 }
 
 function tail(value, max = 4000) {

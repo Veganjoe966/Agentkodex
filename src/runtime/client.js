@@ -6,15 +6,28 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { ensureDir, readText } = require('../utils');
 const { ensureKodex } = require('../kodexStore');
-const { socketPathForRoot, daemonLogPath, readDaemonInfo, writeDaemonInfo, getSession } = require('./sessionStore');
+const { socketPathForRoot, daemonLogPath, readDaemonInfo, writeDaemonInfo, getSession, newSessionId } = require('./sessionStore');
 const { withDaemonToken } = require('./daemonAuth');
+const { issueRuntimeCapability } = require('../capabilities/phases');
 
 function request(root, payload, options = {}) {
   const socketPath = socketPathForRoot(root);
-  return requestSocket(socketPath, withDaemonToken(root, payload), options).then((value) => {
+  return requestSocket(socketPath, withDaemonToken(root, preparePayload(root, payload)), options).then((value) => {
     if (value && value.ok === false) throw new Error(value.error || 'Agentkodex daemon request failed');
     return value && Object.prototype.hasOwnProperty.call(value, 'response') ? value.response : value;
   });
+}
+
+function preparePayload(root, payload = {}) {
+  if (payload.type !== 'startSession' || !payload.session?.command) return payload;
+  const session = { ...payload.session };
+  session.sessionId = session.sessionId || newSessionId(`${session.agent || 'custom'}:${session.task || ''}:${session.command}`);
+  session.capability = session.capability || issueRuntimeCapability(root, {
+    sessionId: session.sessionId,
+    agentId: session.agent || 'custom',
+    cwd: session.cwd || root,
+  });
+  return { ...payload, session };
 }
 
 function requestSession(root, idOrLast, payload, options = {}) {

@@ -13,6 +13,7 @@ const { scanDiff, renderSecurityReport } = require('./security');
 const { summarizeCommandResult } = require('./commandResult');
 const { runLintguardGate } = require('./lintguard/gate');
 const { runQualityGateAsGate } = require('./gates/qualityGate');
+const { issueRuntimeCapability } = require('./capabilities/phases');
 
 async function runTask(options) {
   const root = path.resolve(options.root || process.cwd());
@@ -159,8 +160,10 @@ async function executeAgentPhase(context) {
 
   const agent = getAgent(context.config, context.agentId);
   const promptFile = path.join(context.runDir, 'mission.prompt.md');
+  const sessionId = path.basename(context.runDir);
 
   if (context.explicitCommand) {
+    const capability = issueRuntimeCapability(context.root, { sessionId, agentId: context.agentId, cwd: context.root });
     const result = await runCommand(context.explicitCommand, {
       cwd: context.root,
       logDir: context.runDir,
@@ -171,6 +174,12 @@ async function executeAgentPhase(context) {
       timeoutMs: context.timeoutMs,
       echo: context.echo,
       pty: context.pty,
+      capability,
+      capabilityPhase: 'runtime',
+      capabilityAction: 'command:start',
+      sessionId,
+      agent: context.agentId,
+      requireCapability: true,
       ...context.logPaths,
     });
     return { agent: context.agentId, command: context.explicitCommand, explicitCommand: true, result: summarizeCommandResult(result) };
@@ -227,6 +236,7 @@ async function executeAgentPhase(context) {
     };
   }
 
+  const capability = issueRuntimeCapability(context.root, { sessionId, agentId: context.agentId, cwd: context.root });
   const result = await runCommand(command, {
     cwd: context.root,
     logDir: context.runDir,
@@ -243,6 +253,11 @@ async function executeAgentPhase(context) {
     timeoutMs: context.timeoutMs,
     echo: context.echo,
     pty: context.pty,
+    capability,
+    capabilityPhase: 'runtime',
+    capabilityAction: 'command:start',
+    sessionId,
+    requireCapability: true,
     ...context.logPaths,
   });
 
@@ -271,6 +286,7 @@ function createQaReport({ task, gateResults, agentRun, security, diffStat }) {
     else failed.push({ gate: gate.gate, command: gate.command, exitCode: gate.result?.exitCode, stderrTail: gate.result?.stderrTail });
   }
   const blockingIssues = [];
+  if (agentRun.result?.capability?.allowed === false) blockingIssues.push(`Capability denied: ${agentRun.result.capability.reason}`);
   if (agentRun.result && agentRun.result.exitCode && agentRun.result.exitCode !== 0 && !agentRun.result.skipped) blockingIssues.push(`Agent command failed with exit code ${agentRun.result.exitCode}.`);
   for (const item of failed) blockingIssues.push(`Gate failed: ${item.gate} (${item.command || 'unknown command'}).`);
   for (const finding of security.findings || []) {
@@ -311,6 +327,7 @@ function renderQaReport(qa) {
 
 function decideFinalStatus({ agentRun, gateResults, security, gates }) {
   if (agentRun.error) return 'failed_agent';
+  if (agentRun.result?.capability?.allowed === false) return 'failed_security';
   if (agentRun.result && agentRun.result.policy && agentRun.result.skipped && agentRun.result.policy.allowed === false) return 'failed_agent_policy';
   if (agentRun.result && agentRun.result.exitCode && agentRun.result.exitCode !== 0 && !agentRun.result.skipped) return 'failed';
   if ((security.findings || []).some((f) => ['critical', 'high'].includes(f.severity))) return 'failed_security';

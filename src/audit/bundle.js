@@ -10,18 +10,20 @@ const { resolveSession } = require('../runtime/sessionStore');
 const { ensureDir, exists, readJson, readText, timestampId, slugify, writeText } = require('../utils');
 const { MAX_TEXT_BYTES, mayCopyAuditPath, redactAuditText } = require('./redact');
 const { createManifest, recordArtifact, recordMissing, recordSkipped, writeManifest } = require('./manifest');
+const { issueAuditCapability, verifyCapability } = require('../capabilities/phases');
 
 function createAuditBundle(root, options = {}) {
   const target = resolveTarget(root, options);
   const format = options.format || 'dir';
   const output = resolveOutput(root, target, options);
   ensureDir(output.bundleDir);
+  const capability = issueAuditCapability(root, { sessionId: target.run?.id || target.session?.id || 'audit', cwd: root });
 
   const manifest = createManifest({ root, run: target.run, session: target.session, format });
   copyKnownArtifacts(manifest, output.bundleDir, target);
-  addGitArtifacts(manifest, output.bundleDir, root);
+  addGitArtifacts(manifest, output.bundleDir, root, capability);
   const manifestPath = writeManifest(output.bundleDir, manifest);
-  const zipPath = format === 'zip' ? zipBundle(output.bundleDir, output.zipPath) : null;
+  const zipPath = format === 'zip' ? zipBundle(root, output.bundleDir, output.zipPath, capability) : null;
 
   return {
     dir: output.bundleDir,
@@ -74,6 +76,7 @@ function copyKnownArtifacts(manifest, bundleDir, target) {
     ['approval_records', session?.files?.approvals],
     ['policy_notes', runDir && path.join(runDir, 'policy.log')],
     ['security_report', runDir && path.join(runDir, 'security-report.md')],
+    ['audit_evidence', runDir && path.join(runDir, 'audit-evidence.jsonl')],
     ['final_report', runDir && path.join(runDir, 'final-report.md')],
     ['changed_files_summary', runDir && path.join(runDir, 'diff.stat')],
     ['git_diff_patch', runDir && path.join(runDir, 'diff.patch')],
@@ -102,14 +105,14 @@ function copyArtifact(manifest, bundleDir, role, source) {
   });
 }
 
-function addGitArtifacts(manifest, bundleDir, root) {
+function addGitArtifacts(manifest, bundleDir, root, capability) {
   if (!exists(path.join(root, '.git'))) {
     recordMissing(manifest, 'current_changed_files', null, 'not a git repository');
     recordMissing(manifest, 'current_git_diff_patch', null, 'not a git repository');
     return;
   }
-  addGenerated(manifest, bundleDir, 'current_changed_files', git(root, ['diff', '--name-status']));
-  addGenerated(manifest, bundleDir, 'current_git_diff_patch', git(root, ['diff', '--']));
+  addGenerated(manifest, bundleDir, 'current_changed_files', git(root, ['diff', '--name-status'], capability));
+  addGenerated(manifest, bundleDir, 'current_git_diff_patch', git(root, ['diff', '--'], capability));
 }
 
 function addGenerated(manifest, bundleDir, role, text) {
@@ -120,12 +123,16 @@ function addGenerated(manifest, bundleDir, role, text) {
   recordArtifact(manifest, { role, source: 'generated', file, bytes: Buffer.byteLength(redacted.text), sha256: crypto.createHash('sha256').update(redacted.text).digest('hex'), redacted: redacted.changed, redactionMarkers: redacted.markerCount });
 }
 
-function git(root, args) {
+function git(root, args, capability) {
+  const decision = verifyCapability(root, capability, { sessionId: capability.sessionId, agentId: capability.agentId, phase: 'audit', action: 'audit:git', path: root });
+  if (!decision.allowed) return '';
   const result = spawnSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: MAX_TEXT_BYTES });
   return `${result.stdout || ''}${result.stderr || ''}`;
 }
 
-function zipBundle(bundleDir, zipPath) {
+function zipBundle(root, bundleDir, zipPath, capability) {
+  const decision = verifyCapability(root, capability, { sessionId: capability.sessionId, agentId: capability.agentId, phase: 'audit', action: 'audit:zip', path: root });
+  if (!decision.allowed) throw new Error(decision.reason);
   const probe = spawnSync(process.platform === 'win32' ? 'where' : 'sh', process.platform === 'win32' ? ['zip'] : ['-lc', 'command -v zip >/dev/null 2>&1']);
   if (probe.status !== 0) throw new Error('zip command is not available; use --format dir.');
   ensureDir(path.dirname(zipPath));

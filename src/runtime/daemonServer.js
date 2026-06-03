@@ -6,7 +6,6 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { ensureDir, appendText, shellQuote } = require('../utils');
 const { redactSecrets } = require('../policy');
-const { authorizeCommand } = require('../authorization');
 const { hardenSocket, sanitizeError } = require('../security/controlPlane');
 const { ensureDaemonToken, assertDaemonToken } = require('./daemonAuth');
 const {
@@ -23,6 +22,7 @@ const {
 } = require('./sessionStore');
 const { createApproval, listApprovals, resolveApproval, updateApproval } = require('./approvalQueue');
 const { detectState, detectApprovalRequest, parseEventsFromOutput } = require('./stateDetector');
+const { authorizeDaemonStart, assertDaemonRuntimeCapability } = require('./daemonSecurity');
 
 class AgentkodexDaemon {
   constructor(root, options = {}) {
@@ -123,18 +123,10 @@ class AgentkodexDaemon {
     const cwd = path.resolve(input.cwd || this.root);
     const mode = input.mode || 'supervised';
     const yes = Boolean(input.yes || input.autoApprove);
-    const policy = authorizeCommand(command, {
-      root: this.root,
-      mode,
-      yes,
-      agentLaunch: Boolean(input.trustedAgentLaunch),
-      intent: input.task || command,
-      holder: input.runId || input.sessionId || 'agentkodex-daemon',
-      agent: input.agent,
-      adapterKind: input.adapterKind,
-    });
+    const { sessionId, policy, capability } = authorizeDaemonStart(this.root, input, command, cwd, mode, yes);
 
     const session = createSession(this.root, {
+      id: sessionId,
       agent: input.agent || 'custom',
       task: input.task || '',
       command,
@@ -145,7 +137,7 @@ class AgentkodexDaemon {
       status: policy.allowed ? 'starting' : 'awaiting_approval',
       state: policy.allowed ? 'starting' : 'awaiting_approval',
       policy,
-      gates: Array.isArray(input.gates) ? input.gates : [],
+      capabilities: { runtime: capability },
       initialInput: input.initialInput ? true : false,
       closeStdinAfterInitial: Boolean(input.closeStdin || input.closeStdinAfterInitial),
       pendingStart: policy.allowed ? null : { ...input, cwd, command, forceApproved: true },
@@ -180,6 +172,7 @@ class AgentkodexDaemon {
   spawnForSession(session, input = {}) {
     const command = session.command;
     const displayCommand = redactSecrets(command);
+    assertDaemonRuntimeCapability(this.root, session);
     const cwd = session.cwd || this.root;
     const env = { ...process.env, ...(input.env || {}) };
     const usePty = Boolean(input.pty || input.usePty) && process.platform !== 'win32';

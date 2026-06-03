@@ -6,6 +6,8 @@ const { discoverProject } = require('../discovery');
 const { runCommand } = require('../sessionRunner');
 const { ensureDir, writeJson } = require('../utils');
 const { scopedFiles, isEnvFile } = require('./fileScope');
+const { issueQualityCapability } = require('../capabilities/phases');
+const { writeAuditEvidence } = require('../audit/evidence');
 
 const DEFAULT_MAX_LINES = 400;
 const FORBIDDEN_IMPORTS = [
@@ -19,28 +21,36 @@ async function runQualityGate(options = {}) {
   const files = scopedFiles(root, options.changedFiles || options.files || []);
   const logDir = options.logDir || path.join(root, '.agentkodex', 'quality-gate');
   ensureDir(logDir);
+  const capability = options.capability || issueQualityCapability(root, { sessionId: options.sessionId, runId: options.runId, cwd: root });
 
   const checks = [];
   for (const spec of commandSpecs(discovery)) {
-    checks.push(await runCommandCheck(root, spec, { ...options, logDir }));
+    checks.push(await runCommandCheck(root, spec, { ...options, logDir, capability }));
   }
   checks.push(runLocCheck(root, files, Number(options.maxFileLines || DEFAULT_MAX_LINES)));
   checks.push(runArchitectureCheck(root, files, options.forbiddenImports || FORBIDDEN_IMPORTS));
 
   const failed = checks.find((check) => !check.ok);
-  return {
+  const result = {
     ok: !failed,
     summary: failed ? `Quality gate failed: ${failed.name}` : 'Quality gate passed.',
     checks,
     filesChecked: files.map((file) => path.relative(root, file)).sort(),
     blockedReason: failed ? failed.details[0] || `${failed.name} failed` : null,
   };
+  writeAuditEvidence(root, {
+    type: 'quality_gate_result',
+    ok: result.ok,
+    blockedReason: result.blockedReason,
+    checks: result.checks,
+  }, { runDir: options.runDir });
+  return result;
 }
 
 async function runQualityGateAsGate(root, outputDir, options = {}) {
   const outputPath = path.join(outputDir, 'quality-gate.json');
   const started = Date.now();
-  const result = await runQualityGate({ ...options, projectRoot: root, logDir: outputDir });
+  const result = await runQualityGate({ ...options, projectRoot: root, logDir: outputDir, runDir: options.runDir || path.dirname(outputDir) });
   writeJson(outputPath, result);
   return {
     gate: 'quality',
@@ -85,6 +95,12 @@ async function runCommandCheck(root, spec, options) {
     intent: `Agentkodex quality ${spec.name}`,
     holder: options.holder || 'quality-gate',
     config: options.config,
+    capability: options.capability,
+    capabilityPhase: 'quality',
+    capabilityAction: 'quality:command',
+    sessionId: options.capability?.sessionId,
+    agent: options.capability?.agentId || 'lintguard',
+    requireCapability: true,
   });
   const ok = result.exitCode === 0 && !result.skipped;
   return check(spec.name, ok, ok ? 0 : 1, 0, [

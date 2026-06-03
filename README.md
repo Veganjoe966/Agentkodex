@@ -6,12 +6,23 @@ It runs Codex CLI, Claude Code, Aider, Gemini CLI, OpenCode, Cursor CLI, Copilot
 
 Agentkodex is not another coding chatbot or scaffold generator. It is the runtime harness around the tools developers already use: package managers, git, tests, builds, deployment CLIs, approval prompts, logs, and long-lived terminal workflows.
 
+## Latest update
+
+Agentkodex now includes direct execution-path capability enforcement:
+
+- Runtime v2, shell/custom agent commands, swarm phases, tournament contestants, and audit helper commands require scoped signed capabilities before command launch.
+- Capabilities verify `sessionId`, `agentId`, `phase`, action type, path scope, expiration, and signature.
+- Failed capability checks, denied actions, security decisions, and quality gate results are written as audit evidence.
+- Audit bundles include run-local evidence when available.
+- Routing and scorecards now track `securityAllowed`, `securityDeniedCount`, `qualityGateOk`, `qualityViolationCount`, and `completionBlocked`.
+- The regression suite includes `runtime execution path denies command without valid capability`.
+
 ## One-command install
 
-From a local checkout or unpacked release folder:
+Recommended npm install:
 
 ```bash
-npm install -g .
+npm install -g agentkodex@latest
 ```
 
 Then verify:
@@ -19,6 +30,20 @@ Then verify:
 ```bash
 agentkodex --help
 agentkodex doctor
+```
+
+One-shot installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Veganjoe966/Agentkodex/main/install.sh | sh
+```
+
+The one-shot installer uses npm first. If the npm registry package is unavailable, it falls back to `npm install -g github:Veganjoe966/Agentkodex#main`. It never runs `sudo`; if global npm permissions are not configured, fix your npm prefix or use a Node version manager.
+
+Install from GitHub explicitly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Veganjoe966/Agentkodex/main/install.sh | sh -s -- --source github
 ```
 
 ## First run
@@ -48,6 +73,7 @@ Implemented capabilities:
 - Repo intelligence profiles, agent routing, agent scorecards, local audit bundles, and swarm execution orchestration.
 - Policy engine with safe, approval-required, and blocked command categories.
 - Optional first-party Agentguard capability bridge for signed command authorization before execution.
+- Scoped Agentguard-compatible capabilities enforced at command launch boundaries.
 - Agent operations gates: `agentkodex quality check` for completion quality and an Agentguard-compatible security gate interface.
 - Optional Lintguard sidecar quality gate via `agentkodex lintguard check`.
 - Secret redaction in logs.

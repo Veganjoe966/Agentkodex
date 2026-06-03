@@ -5,6 +5,7 @@ const { startAgentSession, waitForSession } = require('../runtime/sessionManager
 const { ensureKodex, kodexPath } = require('../kodexStore');
 const { ensureDir, timestampId, slugify, writeJson, writeText } = require('../utils');
 const { renderSwarmSummary } = require('./summary');
+const { issueSwarmCapability, verifyCapability } = require('../capabilities/phases');
 
 const PHASES = ['research', 'planner', 'builder', 'reviewer', 'qa', 'security', 'release'];
 
@@ -13,7 +14,7 @@ async function runSwarm(options = {}) {
   const task = String(options.task || '').trim();
   if (!task) throw new Error('Missing task. Example: agentkodex swarm --builder codex "Build feature"');
   ensureKodex(root);
-  const id = `${timestampId()}-${slugify(task, 40)}`;
+  const id = options.id || `${timestampId()}-${slugify(task, 40)}`;
   const dir = kodexPath(root, 'swarms', id);
   ensureDir(dir);
 
@@ -24,6 +25,12 @@ async function runSwarm(options = {}) {
     const command = options.commands[phase] || options.command || '';
     if (requiresCommand(agent) && !command) {
       results.push({ phase, agent, status: 'skipped', reason: `${agent} swarm phase requires --${phase}-command or --command` });
+      continue;
+    }
+    const capability = options.capabilities?.[phase] || issueSwarmCapability(root, { swarmId: id, phase, agentId: agent, cwd: root });
+    const decision = verifyCapability(root, capability, { sessionId: `swarm:${id}:${phase}:${agent}`, agentId: agent, phase: 'swarm', action: 'phase:execute', path: root });
+    if (!decision.allowed) {
+      results.push({ phase, agent, status: 'denied', reason: decision.reason, capabilityId: capability?.capabilityId || null });
       continue;
     }
     const session = await startAgentSession({
@@ -39,7 +46,7 @@ async function runSwarm(options = {}) {
       pty: Boolean(options.pty),
     });
     const final = options.wait ? await waitForSession(root, session.id, Number(options.timeoutMs || 300000)).catch(() => null) : null;
-    results.push({ phase, agent, status: final?.session?.status || session.status, sessionId: session.id, runId: session.runId, runDir: session.runDir });
+    results.push({ phase, agent, status: final?.session?.status || session.status, sessionId: session.id, runId: session.runId, runDir: session.runDir, capability });
   }
 
   const manifest = { id, task, createdAt: new Date().toISOString(), phases: results };

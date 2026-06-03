@@ -6,7 +6,7 @@ Package: `agentkodex@0.3.0`
 
 ## Summary
 
-Local validation passed for the production CLI harness, Runtime v2 sessions, audit bundle, Agentguard authorization bridge, Agentkodex quality gate, Lintguard adapter gate, intelligence layer, routing, scorecards, tournaments, swarm execution, policy, discovery, gates, and Cockpit snapshot mode.
+Local validation passed for the production CLI harness, Runtime v2 sessions, scoped Agentguard capabilities, audit bundle evidence, Agentkodex quality gate, Lintguard adapter gate, intelligence layer, routing, scorecards, tournaments, swarm execution, policy, discovery, gates, and Cockpit snapshot mode.
 
 ## Commands Run
 
@@ -15,6 +15,7 @@ Syntax check:
 ```bash
 npm run lint
 npm run typecheck
+sh -n install.sh
 ```
 
 Result: passed.
@@ -28,11 +29,20 @@ npm test
 Result:
 
 ```text
-1..47
-# tests 47
-# pass 47
+1..54
+# tests 54
+# pass 54
 # fail 0
 ```
+
+Capability enforcement coverage:
+
+- Runtime execution path denies command without valid capability.
+- Runtime execution path allows valid scoped capability.
+- Expired, wrong-session, wrong-agent, wrong-phase, and wrong-path capabilities are denied.
+- Swarm agents cannot reuse another agent capability.
+- Tournament contestants cannot reuse another contestant capability.
+- Capability failures write audit evidence before returning.
 
 Agentkodex quality gate:
 
@@ -41,6 +51,14 @@ npm run quality:gate
 ```
 
 Result: passed. The JSON output reported `ok: true` and successful `eslint`, `typecheck`, `tests`, `loc`, and `architecture` checks. Command output was captured under `.agentkodex/quality-gate/`.
+
+Package dry run:
+
+```bash
+npm pack --dry-run --json
+```
+
+Result: passed. The package includes `install.sh` with executable mode and excludes `tests/`.
 
 Agentguard bridge smoke:
 
@@ -149,6 +167,7 @@ Result: wrote `.agentkodex/swarms/<id>/manifest.json` and `summary.md`; the buil
 - policy: observe-mode read-only enforcement, manual approval patterns, redaction
 - Agentguard: local JSON bridge, signed capability evidence, approval-required command gating
 - Agentkodex quality gate: CLI/API/CI entrypoints, real lint/type/test failures, LOC budget, forbidden imports, completion blocking, JSON contract
+- Agentguard capabilities: runtime/swarm/tournament/audit/quality phase scopes, direct execution-path checks, failed-validation evidence
 - Lintguard: sidecar/local JSON gate, token-auth tests, lint/typecheck completion blocking
 - control plane: Cockpit token auth, public-host guard, daemon socket token rejection, socket permissions
 - LOC guard: source files fail tests if they exceed the 400-line hard cap

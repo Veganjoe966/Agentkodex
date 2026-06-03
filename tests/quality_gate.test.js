@@ -59,6 +59,8 @@ test('quality gate blocks completion through gate runner', async () => {
   const results = await runGateCommands({ root, runDir: root, gates: ['quality'], mode: 'sandbox_auto', echo: false });
   assert.equal(results[0].gate, 'quality');
   assert.equal(results[0].result.exitCode, 1);
+  const evidence = fs.readFileSync(path.join(root, 'audit-evidence.jsonl'), 'utf8');
+  assert.match(evidence, /quality_gate_result/);
 });
 
 test('quality gate output is machine-readable json', async () => {

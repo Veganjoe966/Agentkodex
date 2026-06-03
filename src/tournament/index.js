@@ -7,6 +7,7 @@ const { copyDirFiltered, ensureDir, timestampId, slugify, writeJson, writeText }
 const { collectRunMetrics, selectWinner } = require('../core/scoring/metrics');
 const { recordAgentRun } = require('../scorecards/store');
 const { renderTournamentSummary } = require('./report');
+const { issueTournamentCapability, verifyCapability } = require('../capabilities/phases');
 
 async function runTournament(options) {
   const root = path.resolve(options.root || process.cwd());
@@ -16,7 +17,7 @@ async function runTournament(options) {
   if (!agents.length) throw new Error('Missing agents. Example: --agents codex,claude-code');
 
   ensureKodex(root);
-  const id = `${timestampId()}-${slugify(task, 40)}`;
+  const id = options.id || `${timestampId()}-${slugify(task, 40)}`;
   const tournamentDir = kodexPath(root, 'tournaments', id);
   ensureDir(path.join(tournamentDir, 'workspaces'));
 
@@ -24,6 +25,14 @@ async function runTournament(options) {
   for (const agent of agents) {
     const startedAt = new Date().toISOString();
     const workDir = path.join(tournamentDir, 'workspaces', agent);
+    const capability = options.capabilities?.[agent] || issueTournamentCapability(root, { tournamentId: id, agentId: agent, cwd: workDir });
+    const decision = verifyCapability(root, capability, { sessionId: `tournament:${id}:1:${agent}`, agentId: agent, phase: 'tournament', action: 'contestant:run', path: workDir });
+    if (!decision.allowed) {
+      const metrics = { agent, task, status: 'denied', completion: false, securityAllowed: false, securityDeniedCount: 1, qualityGateOk: null, qualityViolationCount: 0, completionBlocked: true };
+      recordAgentRun(root, agent, task, metrics);
+      results.push({ agent, runDir: null, status: 'denied', reason: decision.reason, capabilityId: capability?.capabilityId || null, metrics });
+      continue;
+    }
     copyDirFiltered(root, workDir, { ignore: ['.git', 'node_modules', '.agentkodex', 'dist', 'coverage', '.next', '.turbo', 'vendor'] });
     const run = await runTask({
       root: workDir,
@@ -39,7 +48,7 @@ async function runTournament(options) {
     const endedAt = new Date().toISOString();
     const metrics = collectRunMetrics({ run, agent, task, startedAt, endedAt });
     recordAgentRun(root, agent, task, metrics);
-    results.push({ agent, runDir: run.dir, status: run.status.status, metrics });
+    results.push({ agent, runDir: run.dir, status: run.status.status, capability, metrics });
   }
 
   const scored = selectWinner(results, options.winnerStrategy || 'balanced');

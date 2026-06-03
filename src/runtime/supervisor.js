@@ -12,6 +12,7 @@ const { detectState, detectApproval, trimBuffer } = require('./stateDetector');
 const { patchSession, appendEvent } = require('./sessionStore');
 const { createApproval, markApproval } = require('./approvalQueue');
 const { ensureSessionToken, assertSessionToken } = require('./controlToken');
+const { assertRuntimeCapability } = require('./sessionSecurity');
 
 function parseArgv(argv) {
   const out = {};
@@ -186,6 +187,14 @@ async function main(argv = process.argv.slice(2)) {
   update({ status: 'running', state: 'starting', supervisorPid: process.pid, socketPath: metadata.socketPath, startedAt: new Date().toISOString() });
   const command = metadata.command;
   const displayCommand = redactSecrets(command);
+  const capability = assertRuntimeCapability(root, metadata);
+  if (!capability.allowed) {
+    event({ type: 'failed_capability_validation', reason: capability.reason });
+    update({ status: 'failed_capability', state: 'blocked', error: capability.reason });
+    fs.appendFileSync(metadata.files.transcript, `\n$ ${displayCommand}\n[CAPABILITY] ${capability.reason}\n`, 'utf8');
+    cleanupSocket(metadata.socketPath);
+    return;
+  }
   event({ type: 'session_started', command: displayCommand, cwd: metadata.cwd || root, pid: process.pid });
 
   const cwd = metadata.cwd || root;

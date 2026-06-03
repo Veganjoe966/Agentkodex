@@ -16,7 +16,18 @@ function routeTask(root, task) {
     category,
     selected: selected.agent,
     reason: renderReason(selected.card, category),
-    candidates: candidates.map((item) => ({ agent: item.agent, score: item.score, runs: item.card.runs, successRate: item.card.successRate, gatePassRate: item.card.gatePassRate })),
+    candidates: candidates.map((item) => ({
+      agent: item.agent,
+      score: item.score,
+      runs: item.card.runs,
+      successRate: item.card.successRate,
+      gatePassRate: item.card.gatePassRate,
+      securityAllowed: item.card.securityAllowed,
+      securityDeniedCount: item.card.securityDeniedCount,
+      qualityGateOk: item.card.qualityGateOk,
+      qualityViolationCount: item.card.qualityViolationCount,
+      completionBlocked: item.card.completionBlocked,
+    })),
   };
 }
 
@@ -24,8 +35,10 @@ function routeScore(card, category) {
   const categoryRuns = card.taskCategories?.[category] || 0;
   const success = card.successRate === null ? 0 : card.successRate * 60;
   const gates = card.gatePassRate === null ? 0 : card.gatePassRate * 25;
+  const securityPenalty = Number(card.securityDeniedCount || 0) * 20;
+  const qualityPenalty = Number(card.qualityViolationCount || 0) * 3 + (card.qualityGateOk === false ? 15 : 0);
   const duration = card.avgDurationMs ? Math.min(10, 60000 / Math.max(card.avgDurationMs, 1)) : 0;
-  return Math.round((success + gates + duration + categoryRuns * 5) * 100) / 100;
+  return Math.round((success + gates + duration + categoryRuns * 5 - securityPenalty - qualityPenalty) * 100) / 100;
 }
 
 function renderReason(card, category) {
