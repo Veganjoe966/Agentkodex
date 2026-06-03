@@ -1,0 +1,40 @@
+'use strict';
+
+const { loadScorecards, inferTaskCategory } = require('../scorecards/store');
+
+function routeTask(root, task) {
+  const scorecards = loadScorecards(root);
+  const cards = Object.values(scorecards.agents || {}).filter((card) => card.runs > 0);
+  const category = inferTaskCategory(task);
+  if (!cards.length) {
+    return { task, category, selected: null, reason: 'insufficient history', candidates: [] };
+  }
+  const candidates = cards.map((card) => ({ agent: card.agent, score: routeScore(card, category), card })).sort((a, b) => b.score - a.score || a.agent.localeCompare(b.agent));
+  const selected = candidates[0];
+  return {
+    task,
+    category,
+    selected: selected.agent,
+    reason: renderReason(selected.card, category),
+    candidates: candidates.map((item) => ({ agent: item.agent, score: item.score, runs: item.card.runs, successRate: item.card.successRate, gatePassRate: item.card.gatePassRate })),
+  };
+}
+
+function routeScore(card, category) {
+  const categoryRuns = card.taskCategories?.[category] || 0;
+  const success = card.successRate === null ? 0 : card.successRate * 60;
+  const gates = card.gatePassRate === null ? 0 : card.gatePassRate * 25;
+  const duration = card.avgDurationMs ? Math.min(10, 60000 / Math.max(card.avgDurationMs, 1)) : 0;
+  return Math.round((success + gates + duration + categoryRuns * 5) * 100) / 100;
+}
+
+function renderReason(card, category) {
+  const success = card.successRate === null ? 'insufficient success history' : `${Math.round(card.successRate * 100)}% success`;
+  const gates = card.gatePassRate === null ? 'insufficient gate history' : `${Math.round(card.gatePassRate * 100)} gate pass rate`;
+  const categoryRuns = card.taskCategories?.[category] || 0;
+  return `${success}, ${gates}, ${categoryRuns} prior ${category} task(s), avg duration ${card.avgDurationMs ?? 'unknown'}ms`;
+}
+
+module.exports = {
+  routeTask,
+};

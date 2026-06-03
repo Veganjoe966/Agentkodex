@@ -1,0 +1,10 @@
+.agentkodex/
+coverage/
+node_modules/
+*.tgz
+*.zip
+*.tar.gz
+*.tmp
+*.bak
+.DS_Store
+npm-test-output.txt

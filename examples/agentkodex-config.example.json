@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "defaultAgent": "local",
+  "defaultMode": "supervised",
+  "requiredGates": ["lint", "test", "build"],
+  "commandTimeoutMs": 1800000,
+  "runtime": {
+    "preferred": "cockpit",
+    "pty": true,
+    "sessionDaemon": false
+  },
+  "policy": {
+    "approvalQueue": true,
+    "redactSecrets": true,
+    "blockDestructiveCommands": true
+  },
+  "agents": {
+    "custom": {
+      "kind": "custom",
+      "description": "Example custom coding-agent command.",
+      "commandTemplate": "my-agent --prompt-file {promptFile} --cwd {cwd}",
+      "stdin": false
+    }
+  }
+}

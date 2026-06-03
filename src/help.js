@@ -1,0 +1,64 @@
+'use strict';
+
+function helpText() {
+  return `Agentkodex — CLI-native agent harness for autonomous software delivery.
+
+Usage:
+  agentkodex init [--cwd path]
+  agentkodex discover [--json] [--cwd path]
+  agentkodex intelligence show|rebuild
+  agentkodex route "task"
+  agentkodex plan "task"
+  agentkodex suggest "task"
+  agentkodex run [options] "task"
+  agentkodex gates run --gates lint,test,build
+  agentkodex run --runtime cockpit [options] "task"
+  agentkodex swarm --builder shell --reviewer shell --qa shell "task"
+  agentkodex daemon start|stop|status|logs
+  agentkodex cockpit [--port 3919] [--host 127.0.0.1] [--once|--json]
+  agentkodex session start|list|status|send|attach|interrupt|kill|replay|gates|finalize
+  agentkodex approvals list|approve|deny
+  agentkodex approve <approval-id> / deny <approval-id>
+  agentkodex tournament --agents codex,claude-code,aider --task "task"
+  agentkodex replay [last|run-id]
+  agentkodex status [last|run-id] [--json]
+  agentkodex report [last|run-id]
+  agentkodex audit-bundle [last|run-id] [--run id] [--session id] [--out dir] [--format dir|zip]
+  agentkodex agents list|detect|set|scorecards
+  agentkodex policy "command to classify"
+  agentkodex kodex show
+  agentkodex doctor
+
+Run options:
+  --agent <id>          local, shell, codex, claude-code, aider, gemini, opencode, cursor, copilot, custom
+  --mode <mode>         observe, supervised, sandbox_auto, trusted_auto
+  --gates <list>        comma list such as lint,test,build,e2e or none
+  --command <cmd>       run an explicit implementation command instead of agent template
+  --custom-command      one-off custom agent command/template
+  --shell-command       one-off shell adapter command
+  --runtime cockpit     start a persistent Runtime v2 agent cockpit session
+  --cockpit             alias for --runtime cockpit
+  --skip-agent          skip implementation phase and run only discovery/gates/reports
+  --yes                 approve reviewed risky commands; blocked commands still fail
+  --pty                 wrap command with script(1) pseudo-terminal when available
+  --wait                with session start, wait for exit and auto-finalize
+  --no-finalize         with session start --wait, skip automatic gate finalization
+  --quiet               reduce live output
+  --cwd, --repo <path>  project root
+
+Command template variables:
+  {promptFile} {prompt} {cwd} {runDir} {task}
+
+Examples:
+  agentkodex init
+  agentkodex route "large refactor"
+  agentkodex agents scorecards
+  agentkodex intelligence rebuild
+  agentkodex tournament --agents shell,custom --task "Verify current repo" --gates test
+  agentkodex swarm --builder shell --reviewer shell --qa shell "Review validation"
+  agentkodex agents set custom --cmd "my-agent --file {promptFile}"
+  agentkodex audit-bundle last
+`;
+}
+
+module.exports = { helpText };

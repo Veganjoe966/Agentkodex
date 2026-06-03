@@ -39,6 +39,12 @@ plan
 suggest
 run
 run --runtime cockpit
+gates run
+intelligence show/rebuild
+route
+agents scorecards
+audit-bundle
+swarm
 session start/list/status/send/attach/interrupt/kill/replay/gates/finalize
 approvals list/approve/deny
 cockpit
@@ -100,8 +106,12 @@ Project memory lives at:
   commands.kodex.json
   errors.kodex.json
   approvals.json
+  agents/
+  audit/
+  intelligence/
   runs/
   sessions/
+  swarms/
   tournaments/
 ```
 
@@ -126,6 +136,7 @@ aider
 gemini
 opencode
 cursor
+copilot
 custom
 ```
 
@@ -149,6 +160,11 @@ Core files:
 src/runtime/sessionManager.js
 src/runtime/supervisor.js
 src/runtime/sessionStore.js
+src/runtime/sessionPaths.js
+src/runtime/sessionRecord.js
+src/runtime/sessionIo.js
+src/runtime/sessionApprovalStore.js
+src/runtime/sessionProcess.js
 src/runtime/approvalQueue.js
 src/runtime/stateDetector.js
 src/runtime/attach.js
@@ -275,6 +291,8 @@ It writes:
 
 ```text
 gate-results.json
+gate-report.md
+gate-outputs/
 learned-errors.json
 diff.patch
 diff.stat
@@ -285,17 +303,85 @@ qa-report.md
 final-report.md
 ```
 
-## 9. Tournament mode
+## 9. Intelligence layer
+
+Core files:
+
+```text
+src/intelligence/
+src/router/
+src/scorecards/
+src/core/scoring/
+```
+
+Agentkodex persists repo intelligence under:
+
+```text
+.agentkodex/intelligence/
+  project-profile.json
+  stack-profile.json
+  command-profile.json
+  dependency-profile.json
+  historical-failures.json
+  historical-fixes.json
+  agent-performance.json
+  profile.md
+
+.agentkodex/agents/
+  scorecards.json
+```
+
+The router uses real scorecards only. If no run history exists, it reports `insufficient history`.
+
+## 10. Tournament mode
 
 Implementation:
 
 ```text
-src/tournament.js
+src/tournament/
+src/core/scoring/
 ```
 
-Tournament mode runs a task against multiple agents in isolated workspace copies, executes gates, and compares results. This makes Agentkodex a practical local benchmark harness for real repos.
+Tournament mode runs a task against multiple agents in isolated workspace copies, executes gates, collects metrics, updates scorecards, and writes:
 
-## 10. Safety and policy
+```text
+.agentkodex/tournaments/<id>/
+  manifest.json
+  results.json
+  scorecard.json
+  summary.md
+```
+
+Winner selection is configurable through the shared scoring engine.
+
+## 11. Swarm execution
+
+Core files:
+
+```text
+src/swarm/
+src/runtime/sessionManager.js
+```
+
+Swarm execution coordinates phase-specific Runtime v2 sessions:
+
+```text
+research -> planner -> builder -> reviewer -> qa -> security -> release
+```
+
+Shell/local phases require explicit commands and are recorded as skipped when no real command is supplied.
+
+## 12. Audit bundle
+
+Core files:
+
+```text
+src/audit/
+```
+
+`agentkodex audit-bundle` packages selected run/session evidence into a local bundle with `manifest.json`, `summary.md`, redacted transcript/log artifacts, missing-file records, and redaction report. It never copies `.env`, `node_modules`, vendor folders, build output, or the full repo.
+
+## 13. Safety and policy
 
 Implementation:
 

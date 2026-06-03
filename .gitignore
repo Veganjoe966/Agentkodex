@@ -1,0 +1,15 @@
+.agentkodex/
+**/.agentkodex/
+node_modules/
+coverage/
+dist/
+build/
+.next/
+.turbo/
+*.zip
+*.tar.gz
+*.tgz
+*.tmp
+*.bak
+.DS_Store
+npm-test-output.txt

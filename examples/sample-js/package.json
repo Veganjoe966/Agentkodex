@@ -1,0 +1,11 @@
+{
+  "name": "sample-js-agentkodex-app",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "scripts": {
+    "lint": "node scripts/lint.js",
+    "test": "node --test test/*.test.js",
+    "build": "node scripts/build.js",
+    "dev": "node src/index.js"
+  }
+}

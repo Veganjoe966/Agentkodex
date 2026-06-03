@@ -1,0 +1,25 @@
+{
+  "name": "agentkodex",
+  "version": "0.3.0",
+  "description": "CLI-native agent harness with persistent Runtime v2 sessions and local Cockpit UI.",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "agentkodex": "bin/agentkodex.js"
+  },
+  "scripts": {
+    "start": "node bin/agentkodex.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "cli",
+    "coding-agent",
+    "automation",
+    "developer-tools"
+  ]
+}
