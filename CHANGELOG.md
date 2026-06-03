@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.5 - 2026-06-03
+
+### Fixed
+
+- CLI trust contracts now keep help paths no-work, exit 0, and available across primary and advanced commands.
+- Adapter sandbox/runtime failures, including Codex Bubblewrap loopback limitations, now degrade the affected agent with actionable guidance instead of exposing raw low-level errors.
+- Skipped or not-run validation states no longer count as passed in run status, scoring, or quality reporting.
+
+### Validation
+
+- Trustworthiness regression coverage added for help contracts, validation truthfulness, state freshness, and environment-aware error translation.
+
 ## 1.0.4 - 2026-06-03
 
 ### Fixed
