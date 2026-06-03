@@ -47,6 +47,7 @@ function prepareRuntimeSecurity(input = {}) {
     sessionId: input.sessionId,
     agentId: input.agentId,
     cwd: input.cwd || input.root,
+    runDir: input.runDir,
   });
   return { policy, securityDecision, capability };
 }

@@ -12,6 +12,7 @@ function issueRuntimeCapability(root, input = {}) {
     allowedActions: ['command:start', 'session:send', 'session:interrupt', 'session:kill', 'stdin:close'],
     allowedPaths: [path.resolve(input.cwd || root)],
     ttlMs: input.ttlMs,
+    runDir: input.runDir,
   });
 }
 
@@ -23,6 +24,7 @@ function issueSwarmCapability(root, input = {}) {
     allowedActions: ['phase:execute', 'command:start'],
     allowedPaths: [path.resolve(input.cwd || root)],
     ttlMs: input.ttlMs,
+    runDir: input.runDir,
   });
 }
 
@@ -34,6 +36,7 @@ function issueTournamentCapability(root, input = {}) {
     allowedActions: ['contestant:run', 'command:start'],
     allowedPaths: [path.resolve(input.cwd || root)],
     ttlMs: input.ttlMs,
+    runDir: input.runDir,
   });
 }
 
@@ -45,6 +48,7 @@ function issueAuditCapability(root, input = {}) {
     allowedActions: ['audit:git', 'audit:zip'],
     allowedPaths: [path.resolve(input.cwd || root)],
     ttlMs: input.ttlMs,
+    runDir: input.runDir,
   });
 }
 
@@ -56,6 +60,7 @@ function issueQualityCapability(root, input = {}) {
     allowedActions: ['quality:command'],
     allowedPaths: [path.resolve(input.cwd || root)],
     ttlMs: input.ttlMs,
+    runDir: input.runDir,
   });
 }
 

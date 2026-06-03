@@ -32,13 +32,7 @@ function recordAgentRun(root, agent, task, metrics) {
   card.durationSamples += metrics.durationMs ? 1 : 0;
   card.totalGatePasses += Number(metrics.gatePassCount || 0);
   card.totalGateFailures += Number(metrics.gateFailCount || 0);
-  card.securityDeniedCount += Number(metrics.securityDeniedCount || 0);
-  if (metrics.qualityGateOk !== null && metrics.qualityGateOk !== undefined) {
-    card.qualitySamples += 1;
-    if (metrics.qualityGateOk) card.qualityPasses += 1;
-  }
-  card.qualityViolationCount += Number(metrics.qualityViolationCount || 0);
-  if (metrics.completionBlocked) card.completionBlockedCount += 1;
+  applyGovernance(card, metrics);
   if (metrics.repairLoops !== null && metrics.repairLoops !== undefined) {
     card.totalRepairLoops += Number(metrics.repairLoops || 0);
     card.repairLoopSamples += 1;
@@ -58,7 +52,7 @@ function rebuildScorecards(root) {
       const dir = path.join(runsDir, id);
       const status = readJson(path.join(dir, 'status.json'), null);
       if (!status?.agent) continue;
-      const metrics = collectRunMetrics({ run: { dir, status }, agent: status.agent, task: status.task });
+      const metrics = collectRunMetrics({ root, run: { dir, status }, agent: status.agent, task: status.task });
       mergeMetric(scorecards, status.agent, status.task || '', metrics);
     }
   }
@@ -73,13 +67,7 @@ function mergeMetric(scorecards, agent, task, metrics) {
   card.durationSamples += metrics.durationMs ? 1 : 0;
   card.totalGatePasses += Number(metrics.gatePassCount || 0);
   card.totalGateFailures += Number(metrics.gateFailCount || 0);
-  card.securityDeniedCount += Number(metrics.securityDeniedCount || 0);
-  if (metrics.qualityGateOk !== null && metrics.qualityGateOk !== undefined) {
-    card.qualitySamples += 1;
-    if (metrics.qualityGateOk) card.qualityPasses += 1;
-  }
-  card.qualityViolationCount += Number(metrics.qualityViolationCount || 0);
-  if (metrics.completionBlocked) card.completionBlockedCount += 1;
+  applyGovernance(card, metrics);
   const category = inferTaskCategory(task);
   card.taskCategories[category] = (card.taskCategories[category] || 0) + 1;
   card.lastMetrics = metrics;
@@ -103,6 +91,9 @@ function emptyCard(agent) {
     repairLoopSamples: 0,
     securityAllowed: true,
     securityDeniedCount: 0,
+    failedCapabilityCount: 0,
+    approvalRequiredCount: 0,
+    unsafeActionAttemptCount: 0,
     qualityGateOk: null,
     qualityPasses: 0,
     qualitySamples: 0,
@@ -123,12 +114,25 @@ function finalizeCard(card) {
     gatePassRate: gateTotal ? card.totalGatePasses / gateTotal : null,
     avgDurationMs: card.durationSamples ? Math.round(card.totalDurationMs / card.durationSamples) : null,
     avgRepairLoops: card.repairLoopSamples ? card.totalRepairLoops / card.repairLoopSamples : null,
-    securityAllowed: card.securityDeniedCount === 0,
+    securityAllowed: card.securityDeniedCount === 0 && card.failedCapabilityCount === 0,
     qualityGateOk: card.qualitySamples ? card.qualityPasses === card.qualitySamples : null,
     completionBlocked: card.completionBlockedCount > 0,
     insufficientHistory: card.runs === 0,
     updatedAt: new Date().toISOString(),
   };
+}
+
+function applyGovernance(card, metrics = {}) {
+  card.securityDeniedCount += Number(metrics.securityDeniedCount || 0);
+  card.failedCapabilityCount += Number(metrics.failedCapabilityCount || 0);
+  card.approvalRequiredCount += Number(metrics.approvalRequiredCount || 0);
+  card.unsafeActionAttemptCount += Number(metrics.unsafeActionAttemptCount || 0);
+  if (metrics.qualityGateOk !== null && metrics.qualityGateOk !== undefined) {
+    card.qualitySamples += 1;
+    if (metrics.qualityGateOk) card.qualityPasses += 1;
+  }
+  card.qualityViolationCount += Number(metrics.qualityViolationCount || 0);
+  if (metrics.completionBlocked) card.completionBlockedCount += 1;
 }
 
 function inferTaskCategory(task = '') {

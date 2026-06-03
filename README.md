@@ -12,9 +12,11 @@ Agentkodex now includes direct execution-path capability enforcement:
 
 - Runtime v2, shell/custom agent commands, swarm phases, tournament contestants, and audit helper commands require scoped signed capabilities before command launch.
 - Capabilities verify `sessionId`, `agentId`, `phase`, action type, path scope, expiration, and signature.
-- Failed capability checks, denied actions, security decisions, and quality gate results are written as audit evidence.
-- Audit bundles include run-local evidence when available.
-- Routing and scorecards now track `securityAllowed`, `securityDeniedCount`, `qualityGateOk`, `qualityViolationCount`, and `completionBlocked`.
+- New capabilities are signed with native Ed25519 keys under `.agentkodex/runtime/`, with multiple verification keys and HMAC compatibility-mode warnings during migration.
+- Failed capability checks, denied actions, security decisions, quality gate results, legacy capability use, and key rotations are written as audit evidence.
+- Audit bundles include governance fields and run-local evidence when available.
+- Routing and scorecards track `securityAllowed`, `securityDeniedCount`, `failedCapabilityCount`, `qualityGateOk`, `qualityViolationCount`, `completionBlocked`, `approvalRequiredCount`, and `unsafeActionAttemptCount`.
+- `agentkodex governance summary --json` shows machine-readable governance status for the latest run or aggregate root evidence.
 - The regression suite includes `runtime execution path denies command without valid capability`.
 
 ## One-command install
@@ -111,6 +113,7 @@ Inside any software project:
 ```bash
 agentkodex quickstart
 agentkodex quality check
+agentkodex governance summary --json
 agentkodex gates run --gates lint,test,build
 agentkodex lintguard check --local
 agentkodex cockpit
@@ -168,6 +171,7 @@ agentkodex intelligence rebuild
 agentkodex intelligence show
 agentkodex agents scorecards
 agentkodex route "large refactor"
+agentkodex governance summary
 ```
 
 The intelligence layer persists real local history under `.agentkodex/intelligence/` and `.agentkodex/agents/`. If no run history exists, routing and scorecards report `insufficient history` instead of inventing metrics.
@@ -203,6 +207,7 @@ Each tournament runs agents in isolated workspace copies and writes:
 ```
 
 Metrics include completion, lint/test/build/e2e status, duration, approval count, files changed, diff size, token/cost data when available, and gate outcomes.
+Scorecards also include governance signals so routing can modestly penalize denied actions, failed capability validation, unsafe attempts, repeated quality failures, approval-heavy agents, and blocked completions.
 
 ## Swarm execution
 

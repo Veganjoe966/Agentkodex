@@ -21,7 +21,7 @@ async function runQualityGate(options = {}) {
   const files = scopedFiles(root, options.changedFiles || options.files || []);
   const logDir = options.logDir || path.join(root, '.agentkodex', 'quality-gate');
   ensureDir(logDir);
-  const capability = options.capability || issueQualityCapability(root, { sessionId: options.sessionId, runId: options.runId, cwd: root });
+  const capability = options.capability || issueQualityCapability(root, { sessionId: options.sessionId, runId: options.runId, cwd: root, runDir: options.runDir });
 
   const checks = [];
   for (const spec of commandSpecs(discovery)) {

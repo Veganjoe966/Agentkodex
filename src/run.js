@@ -14,6 +14,7 @@ const { summarizeCommandResult } = require('./commandResult');
 const { runLintguardGate } = require('./lintguard/gate');
 const { runQualityGateAsGate } = require('./gates/qualityGate');
 const { issueRuntimeCapability } = require('./capabilities/phases');
+const { collectRunGovernance, blocksCompletion } = require('./governance/summary');
 
 async function runTask(options) {
   const root = path.resolve(options.root || process.cwd());
@@ -90,7 +91,7 @@ async function runTask(options) {
       continue;
     }
     if (gateCommand.gate === 'quality') {
-      gateResults.push(await runQualityGateAsGate(root, gateOutputDir, { mode, yes, timeoutMs }));
+      gateResults.push(await runQualityGateAsGate(root, gateOutputDir, { mode, yes, timeoutMs, runDir: run.dir }));
       continue;
     }
     if (gateCommand.skipped) {
@@ -125,11 +126,12 @@ async function runTask(options) {
   writeJson(path.join(run.dir, 'security-report.json'), security);
   writeText(path.join(run.dir, 'security-report.md'), renderSecurityReport(security));
 
-  const qa = createQaReport({ task, gateResults, agentRun, security, diffStat });
+  const governance = collectRunGovernance(root, run.dir, { gateResults });
+  const qa = createQaReport({ task, gateResults, agentRun, security, diffStat, governance });
   writeJson(path.join(run.dir, 'qa-report.json'), qa);
   writeText(path.join(run.dir, 'qa-report.md'), renderQaReport(qa));
 
-  const finalStatus = decideFinalStatus({ agentRun, gateResults, security, gates });
+  const finalStatus = decideFinalStatus({ agentRun, gateResults, security, gates, governance });
   const finalReport = createReleaseNotes({ task, status: finalStatus, gateResults, security, diffStat });
   writeText(path.join(run.dir, 'final-report.md'), finalReport);
 
@@ -138,6 +140,7 @@ async function runTask(options) {
     completedAt: new Date().toISOString(),
     agentResult: summarizeCommandResult(agentRun.result),
     qa,
+    governance,
     security,
     gates: gateResults,
     files: relFiles(run.dir),
@@ -150,7 +153,7 @@ async function runTask(options) {
     console.log(`Final report: ${path.join(run.dir, 'final-report.md')}`);
   }
 
-  return { id: run.id, dir: run.dir, status, qa, security, gateResults, agentRun };
+  return { id: run.id, dir: run.dir, status, qa, governance, security, gateResults, agentRun };
 }
 
 async function executeAgentPhase(context) {
@@ -163,7 +166,7 @@ async function executeAgentPhase(context) {
   const sessionId = path.basename(context.runDir);
 
   if (context.explicitCommand) {
-    const capability = issueRuntimeCapability(context.root, { sessionId, agentId: context.agentId, cwd: context.root });
+    const capability = issueRuntimeCapability(context.root, { sessionId, agentId: context.agentId, cwd: context.root, runDir: context.runDir });
     const result = await runCommand(context.explicitCommand, {
       cwd: context.root,
       logDir: context.runDir,
@@ -236,7 +239,7 @@ async function executeAgentPhase(context) {
     };
   }
 
-  const capability = issueRuntimeCapability(context.root, { sessionId, agentId: context.agentId, cwd: context.root });
+  const capability = issueRuntimeCapability(context.root, { sessionId, agentId: context.agentId, cwd: context.root, runDir: context.runDir });
   const result = await runCommand(command, {
     cwd: context.root,
     logDir: context.runDir,
@@ -276,7 +279,7 @@ function gateOutputFile(outputDir, gateCommand, index) {
   return path.join(outputDir, `${String(index + 1).padStart(2, '0')}-${name}-${hashString(gateCommand.command, 8)}.log`);
 }
 
-function createQaReport({ task, gateResults, agentRun, security, diffStat }) {
+function createQaReport({ task, gateResults, agentRun, security, diffStat, governance = {} }) {
   const passed = [];
   const failed = [];
   const skipped = [];
@@ -287,6 +290,7 @@ function createQaReport({ task, gateResults, agentRun, security, diffStat }) {
   }
   const blockingIssues = [];
   if (agentRun.result?.capability?.allowed === false) blockingIssues.push(`Capability denied: ${agentRun.result.capability.reason}`);
+  if (blocksCompletion(governance)) blockingIssues.push('Governance evidence blocked completion.');
   if (agentRun.result && agentRun.result.exitCode && agentRun.result.exitCode !== 0 && !agentRun.result.skipped) blockingIssues.push(`Agent command failed with exit code ${agentRun.result.exitCode}.`);
   for (const item of failed) blockingIssues.push(`Gate failed: ${item.gate} (${item.command || 'unknown command'}).`);
   for (const finding of security.findings || []) {
@@ -300,6 +304,7 @@ function createQaReport({ task, gateResults, agentRun, security, diffStat }) {
     skippedGates: skipped,
     blockingIssues,
     nonBlockingIssues: skipped.map((item) => `Gate skipped: ${item.gate} (${item.reason})`),
+    governance,
     diffStat: diffStat || '',
   };
 }
@@ -325,8 +330,10 @@ function renderQaReport(qa) {
   return lines.join('\n');
 }
 
-function decideFinalStatus({ agentRun, gateResults, security, gates }) {
+function decideFinalStatus({ agentRun, gateResults, security, gates, governance = {} }) {
   if (agentRun.error) return 'failed_agent';
+  if (Number(governance.failedCapabilityCount || 0) > 0 || Number(governance.securityDeniedCount || 0) > 0) return 'failed_security';
+  if (governance.qualityGateOk === false || governance.completionBlocked) return 'failed_gates';
   if (agentRun.result?.capability?.allowed === false) return 'failed_security';
   if (agentRun.result && agentRun.result.policy && agentRun.result.skipped && agentRun.result.policy.allowed === false) return 'failed_agent_policy';
   if (agentRun.result && agentRun.result.exitCode && agentRun.result.exitCode !== 0 && !agentRun.result.skipped) return 'failed';

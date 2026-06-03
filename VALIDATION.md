@@ -1,12 +1,12 @@
-# Agentkodex v0.3.0 Validation Report
+# Agentkodex v1.0.0 Validation Report
 
 Validated on: 2026-06-03  
 Runtime used for validation: Node.js v20.18.1  
-Package: `agentkodex@0.3.0`
+Package: `agentkodex@1.0.0`
 
 ## Summary
 
-Local validation passed for the production CLI harness, Runtime v2 sessions, scoped Agentguard capabilities, audit bundle evidence, Agentkodex quality gate, Lintguard adapter gate, intelligence layer, routing, scorecards, tournaments, swarm execution, policy, discovery, gates, and Cockpit snapshot mode.
+Local validation passed for the production CLI harness, Runtime v2 sessions, scoped Agentguard capabilities, Ed25519 capability migration, governance summaries, audit bundle evidence, Agentkodex quality gate, Lintguard adapter gate, intelligence layer, routing, scorecards, tournaments, swarm execution, policy, discovery, gates, installer animation, and Cockpit snapshot mode.
 
 ## Commands Run
 
@@ -29,9 +29,9 @@ npm test
 Result:
 
 ```text
-1..54
-# tests 54
-# pass 54
+1..64
+# tests 64
+# pass 64
 # fail 0
 ```
 
@@ -43,6 +43,17 @@ Capability enforcement coverage:
 - Swarm agents cannot reuse another agent capability.
 - Tournament contestants cannot reuse another contestant capability.
 - Capability failures write audit evidence before returning.
+- New capabilities are signed with Ed25519 and include `algorithm` and `keyId`.
+- Legacy HMAC capabilities remain accepted in compatibility mode and write migration-warning evidence.
+- Key rotation keeps previous verification keys active.
+
+Governance visibility:
+
+```bash
+node bin/agentkodex.js governance summary --json
+```
+
+Result: command boots and returns machine-readable governance fields. Focused tests verify audit bundle manifests, scorecards, routing, and completion enforcement consume the same governance summary.
 
 Agentkodex quality gate:
 
@@ -58,7 +69,16 @@ Package dry run:
 npm pack --dry-run --json
 ```
 
-Result: passed. The package includes `install.sh` with executable mode and excludes `tests/`.
+Result: passed. The package includes `install.sh` with executable mode and excludes `tests/`. The installer includes an ASCII Agentkodex banner and interactive install animation while preserving real npm failure output.
+
+NPM publish:
+
+```bash
+npm view agentkodex@1.0.0 version --json
+npm publish --access public
+```
+
+Result: published `agentkodex@1.0.0` to the npm registry and verified the registry reports version `1.0.0`. Publishing used a temporary npm user config that was removed immediately after the command.
 
 Agentguard bridge smoke:
 
@@ -165,9 +185,10 @@ Result: wrote `.agentkodex/swarms/<id>/manifest.json` and `summary.md`; the buil
 
 - discovery: Java, .NET, e2e, Taskfile
 - policy: observe-mode read-only enforcement, manual approval patterns, redaction
-- Agentguard: local JSON bridge, signed capability evidence, approval-required command gating
+- Agentguard: local JSON bridge, Ed25519 signed capability evidence, approval-required command gating
 - Agentkodex quality gate: CLI/API/CI entrypoints, real lint/type/test failures, LOC budget, forbidden imports, completion blocking, JSON contract
-- Agentguard capabilities: runtime/swarm/tournament/audit/quality phase scopes, direct execution-path checks, failed-validation evidence
+- Agentguard capabilities: runtime/swarm/tournament/audit/quality phase scopes, direct execution-path checks, Ed25519 signatures, key rotation, legacy HMAC compatibility evidence, failed-validation evidence
+- governance: audit manifest fields, summary CLI, scorecard fields, routing penalties/rewards, completion blocking
 - Lintguard: sidecar/local JSON gate, token-auth tests, lint/typecheck completion blocking
 - control plane: Cockpit token auth, public-host guard, daemon socket token rejection, socket permissions
 - LOC guard: source files fail tests if they exceed the 400-line hard cap

@@ -11,17 +11,19 @@ const { ensureDir, exists, readJson, readText, timestampId, slugify, writeText }
 const { MAX_TEXT_BYTES, mayCopyAuditPath, redactAuditText } = require('./redact');
 const { createManifest, recordArtifact, recordMissing, recordSkipped, writeManifest } = require('./manifest');
 const { issueAuditCapability, verifyCapability } = require('../capabilities/phases');
+const { collectRunGovernance } = require('../governance/summary');
 
 function createAuditBundle(root, options = {}) {
   const target = resolveTarget(root, options);
   const format = options.format || 'dir';
   const output = resolveOutput(root, target, options);
   ensureDir(output.bundleDir);
-  const capability = issueAuditCapability(root, { sessionId: target.run?.id || target.session?.id || 'audit', cwd: root });
+  const capability = issueAuditCapability(root, { sessionId: target.run?.id || target.session?.id || 'audit', cwd: root, runDir: target.run?.dir });
 
-  const manifest = createManifest({ root, run: target.run, session: target.session, format });
-  copyKnownArtifacts(manifest, output.bundleDir, target);
+  const governance = collectRunGovernance(root, target.run?.dir || null);
+  const manifest = createManifest({ root, run: target.run, session: target.session, format, governance });
   addGitArtifacts(manifest, output.bundleDir, root, capability);
+  copyKnownArtifacts(manifest, output.bundleDir, target);
   const manifestPath = writeManifest(output.bundleDir, manifest);
   const zipPath = format === 'zip' ? zipBundle(root, output.bundleDir, output.zipPath, capability) : null;
 

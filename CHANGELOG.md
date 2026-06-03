@@ -1,19 +1,23 @@
 # Changelog
 
-## 2026-06-03
+## 1.0.0 - 2026-06-03
 
 ### Added
 
 - Professional npm-first installer at `install.sh`, with GitHub fallback through npm and no automatic sudo path.
 - Direct execution-path capability enforcement for Runtime v2, shell/custom commands, swarm phases, tournament contestants, and audit helper commands.
-- Scoped Agentguard-compatible capabilities with session, agent, phase, action, path, expiration, and signature checks.
-- Audit evidence records for security decisions, denied actions, failed capability validation, and quality gate results.
-- Audit bundle inclusion for run-local `audit-evidence.jsonl`.
-- Routing and scorecard signals: `securityAllowed`, `securityDeniedCount`, `qualityGateOk`, `qualityViolationCount`, and `completionBlocked`.
+- Scoped Agentguard-compatible Ed25519 capabilities with session, agent, phase, action, path, expiration, key ID, and signature checks.
+- HMAC capability compatibility mode with legacy-use audit warnings.
+- Native capability key store with key rotation support and multiple verification keys.
+- Audit evidence records for capability issuance, validation success/failure, legacy capability use, key rotation, security decisions, denied actions, and quality gate results.
+- Audit bundle inclusion for run-local `audit-evidence.jsonl` and governance manifest fields.
+- Governance CLI: `agentkodex governance summary [--json]`.
+- Routing and scorecard signals: `securityAllowed`, `securityDeniedCount`, `failedCapabilityCount`, `qualityGateOk`, `qualityViolationCount`, `completionBlocked`, `approvalRequiredCount`, and `unsafeActionAttemptCount`.
 - Regression coverage for missing, expired, wrong-session, wrong-agent, wrong-phase, wrong-path, and reused capabilities.
 
 ### Validation
 
-- `npm test`: 53/53 passing.
+- `npm test`: 64/64 passing.
 - `npm run lint`: passing.
 - `npm run typecheck`: passing.
+- `npm run quality:gate`: passing.

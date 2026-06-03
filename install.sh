@@ -7,6 +7,20 @@ GITHUB_REF="${AGENTKODEX_GITHUB_REF:-main}"
 SOURCE="${AGENTKODEX_INSTALL_SOURCE:-npm}"
 FALLBACK=1
 
+banner() {
+  cat <<'EOF'
+
+    _    ____ _____ _   _ _____ _  __ ___  ____  _____ __  __
+   / \  / ___| ____| \ | |_   _| |/ / / _ \|  _ \| ____|\ \/ /
+  / _ \| |  _|  _| |  \| | | | | ' / | | | | | | |  _|   \  /
+ / ___ \ |_| | |___| |\  | | | | . \ | |_| | |_| | |___  /  \
+/_/   \_\____|_____|_| \_| |_| |_|\_\ \___/|____/|_____/_/\_\
+
+  CLI-native agent operations runtime
+
+EOF
+}
+
 usage() {
   cat <<'EOF'
 Agentkodex installer
@@ -56,6 +70,48 @@ say() {
   printf '%s\n' "$*"
 }
 
+can_animate() {
+  [ -t 1 ] && [ "${AGENTKODEX_NO_ANIMATION:-0}" != "1" ]
+}
+
+run_with_animation() {
+  label="$1"
+  shift
+  if ! can_animate; then
+    "$@"
+    return $?
+  fi
+  log_file="${TMPDIR:-/tmp}/agentkodex-install.$$.log"
+  set +e
+  "$@" >"$log_file" 2>&1 &
+  pid=$!
+  tick=0
+  while kill -0 "$pid" 2>/dev/null; do
+    tick=$(( (tick + 1) % 4 ))
+    case "$tick" in
+      0) frame='|' ;;
+      1) frame='/' ;;
+      2) frame='-' ;;
+      *) frame='\' ;;
+    esac
+    printf '\r[%s] %s' "$frame" "$label"
+    sleep 0.12
+  done
+  wait "$pid"
+  status=$?
+  set -e
+  if [ "$status" -eq 0 ]; then
+    printf '\r[OK] %s\n' "$label"
+    [ "${AGENTKODEX_VERBOSE:-0}" = "1" ] && cat "$log_file"
+    rm -f "$log_file"
+    return 0
+  fi
+  printf '\r[!!] %s\n' "$label" >&2
+  cat "$log_file" >&2
+  rm -f "$log_file"
+  return "$status"
+}
+
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
     echo "Agentkodex requires $1 on PATH." >&2
@@ -78,14 +134,12 @@ install_from_npm() {
   if [ "${AGENTKODEX_VERSION:-}" ]; then
     package_spec="$PACKAGE_NAME@$AGENTKODEX_VERSION"
   fi
-  say "Installing Agentkodex from npm: $package_spec"
-  npm install -g "$package_spec"
+  run_with_animation "Installing Agentkodex from npm: $package_spec" npm install -g "$package_spec"
 }
 
 install_from_github() {
   package_spec="github:$GITHUB_REPO#$GITHUB_REF"
-  say "Installing Agentkodex from GitHub fallback: $package_spec"
-  npm install -g "$package_spec"
+  run_with_animation "Installing Agentkodex from GitHub fallback: $package_spec" npm install -g "$package_spec"
 }
 
 verify_install() {
@@ -99,6 +153,7 @@ verify_install() {
 }
 
 main() {
+  banner
   check_node
   case "$SOURCE" in
     npm)

@@ -24,9 +24,12 @@ function routeTask(root, task) {
       gatePassRate: item.card.gatePassRate,
       securityAllowed: item.card.securityAllowed,
       securityDeniedCount: item.card.securityDeniedCount,
+      failedCapabilityCount: item.card.failedCapabilityCount,
       qualityGateOk: item.card.qualityGateOk,
       qualityViolationCount: item.card.qualityViolationCount,
       completionBlocked: item.card.completionBlocked,
+      approvalRequiredCount: item.card.approvalRequiredCount,
+      unsafeActionAttemptCount: item.card.unsafeActionAttemptCount,
     })),
   };
 }
@@ -35,10 +38,25 @@ function routeScore(card, category) {
   const categoryRuns = card.taskCategories?.[category] || 0;
   const success = card.successRate === null ? 0 : card.successRate * 60;
   const gates = card.gatePassRate === null ? 0 : card.gatePassRate * 25;
-  const securityPenalty = Number(card.securityDeniedCount || 0) * 20;
-  const qualityPenalty = Number(card.qualityViolationCount || 0) * 3 + (card.qualityGateOk === false ? 15 : 0);
+  const securityPenalty = Number(card.securityDeniedCount || 0) * 12 +
+    Number(card.failedCapabilityCount || 0) * 10 +
+    Number(card.unsafeActionAttemptCount || 0) * 8;
+  const approvalPenalty = Math.min(12, Number(card.approvalRequiredCount || 0) * 2);
+  const qualityPenalty = Number(card.qualityViolationCount || 0) * 2 +
+    (card.qualityGateOk === false ? 12 : 0) +
+    Number(card.completionBlockedCount || 0) * 8;
+  const cleanReward = cleanGovernance(card) ? 8 : 0;
   const duration = card.avgDurationMs ? Math.min(10, 60000 / Math.max(card.avgDurationMs, 1)) : 0;
-  return Math.round((success + gates + duration + categoryRuns * 5 - securityPenalty - qualityPenalty) * 100) / 100;
+  return Math.round((success + gates + duration + cleanReward + categoryRuns * 5 - securityPenalty - approvalPenalty - qualityPenalty) * 100) / 100;
+}
+
+function cleanGovernance(card) {
+  return card.runs > 0 &&
+    card.securityAllowed &&
+    card.qualityGateOk !== false &&
+    Number(card.approvalRequiredCount || 0) === 0 &&
+    Number(card.unsafeActionAttemptCount || 0) === 0 &&
+    !card.completionBlocked;
 }
 
 function renderReason(card, category) {

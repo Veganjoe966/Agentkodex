@@ -19,6 +19,9 @@ test('tournament writes required artifacts and configurable scorecard', async ()
   assert.equal(scorecard.winnerStrategy, 'gates');
   assert.equal(typeof scorecard.results[0].metrics.securityAllowed, 'boolean');
   assert.equal(typeof scorecard.results[0].metrics.securityDeniedCount, 'number');
+  assert.equal(typeof scorecard.results[0].metrics.failedCapabilityCount, 'number');
+  assert.equal(typeof scorecard.results[0].metrics.approvalRequiredCount, 'number');
+  assert.equal(typeof scorecard.results[0].metrics.unsafeActionAttemptCount, 'number');
   assert.equal(Object.prototype.hasOwnProperty.call(scorecard.results[0].metrics, 'qualityGateOk'), true);
   assert.equal(typeof scorecard.results[0].metrics.qualityViolationCount, 'number');
   assert.equal(typeof scorecard.results[0].metrics.completionBlocked, 'boolean');

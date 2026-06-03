@@ -13,6 +13,9 @@ test('installer is npm-first with GitHub fallback and no sudo path', () => {
   assert.ok(script.indexOf('install_from_npm') < script.indexOf('install_from_github'));
   assert.match(script, /npm install -g "\$package_spec"/);
   assert.match(script, /github:\$GITHUB_REPO#\$GITHUB_REF/);
+  assert.match(script, /CLI-native agent operations runtime/);
+  assert.match(script, /run_with_animation/);
+  assert.match(script, /AGENTKODEX_NO_ANIMATION/);
   assert.doesNotMatch(script, /\bsudo\b/);
   const syntax = spawnSync('sh', ['-n', scriptPath], { encoding: 'utf8' });
   assert.equal(syntax.status, 0, syntax.stderr);

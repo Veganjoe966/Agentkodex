@@ -23,6 +23,7 @@ const { quickstartCommand } = require('./onboarding/quickstart');
 const { findAgentguardSource } = require('./agentguard/bridge');
 const { lintguardCommand } = require('./lintguard/command');
 const { qualityCommand } = require('./gates/qualityCommand');
+const { governanceCommand } = require('./governance/command');
 
 async function main(argv) {
   const [command = 'help', ...rest] = argv;
@@ -42,6 +43,8 @@ async function main(argv) {
       return lintguardCommand(rest);
     case 'quality':
       return qualityCommand(rest);
+    case 'governance':
+      return governanceCommand(rest);
     case 'audit-bundle':
       return auditBundleCommand(rest);
     case 'intelligence':

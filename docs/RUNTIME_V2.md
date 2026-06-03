@@ -86,6 +86,10 @@ Agentguard evidence is written to `.agentkodex/runtime/agentguard-audit.jsonl`, 
 
 Runtime v2 also stores scoped execution capabilities in session metadata. The supervisor verifies the capability immediately before spawning the command. A daemon request without a valid matching capability is rejected even if the local daemon token is valid.
 
+Agentkodex now issues native Ed25519 capabilities by default. Capability metadata includes `algorithm: "ed25519"` and `keyId`; retired public keys remain usable for verification during key rotation. Legacy HMAC capabilities are accepted only in compatibility mode and emit audit evidence so migration can be tracked.
+
+Governance evidence is written before denial returns. `agentkodex governance summary --json` reports the latest run's security, capability, quality, approval, unsafe-action, and completion-blocking fields.
+
 ## Cockpit workflow
 
 ```bash
@@ -128,6 +132,7 @@ Run bundle:
 .agentkodex/runs/<run-id>/security-report.md
 .agentkodex/runs/<run-id>/final-report.md
 .agentkodex/runs/<run-id>/audit-evidence.jsonl
+.agentkodex/runs/<run-id>/status.json            # includes governance summary after completion
 ```
 
 Audit bundle:

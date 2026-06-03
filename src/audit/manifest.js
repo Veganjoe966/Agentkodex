@@ -4,6 +4,7 @@ const path = require('path');
 const { writeJson, writeText } = require('../utils');
 
 function createManifest(input) {
+  const governance = input.governance || defaultGovernance();
   return {
     product: 'Agentkodex',
     kind: 'audit_bundle',
@@ -15,6 +16,15 @@ function createManifest(input) {
     sessionId: input.session?.id || null,
     sessionDir: input.session?.dir || input.session?.sessionDir || null,
     outputFormat: input.format || 'dir',
+    securityAllowed: governance.securityAllowed,
+    securityDeniedCount: governance.securityDeniedCount,
+    failedCapabilityCount: governance.failedCapabilityCount,
+    qualityGateOk: governance.qualityGateOk,
+    qualityViolationCount: governance.qualityViolationCount,
+    completionBlocked: governance.completionBlocked,
+    approvalRequiredCount: governance.approvalRequiredCount,
+    unsafeActionAttemptCount: governance.unsafeActionAttemptCount,
+    governance,
     artifacts: [],
     missing: [],
     skipped: [],
@@ -23,6 +33,19 @@ function createManifest(input) {
       markerCount: 0,
       notes: ['Artifact text is passed through Agentkodex secret redaction before writing.'],
     },
+  };
+}
+
+function defaultGovernance() {
+  return {
+    securityAllowed: true,
+    securityDeniedCount: 0,
+    failedCapabilityCount: 0,
+    qualityGateOk: null,
+    qualityViolationCount: 0,
+    completionBlocked: false,
+    approvalRequiredCount: 0,
+    unsafeActionAttemptCount: 0,
   };
 }
 
@@ -57,6 +80,9 @@ function renderSummary(manifest) {
   lines.push(`Missing: ${manifest.missing.length}`);
   lines.push(`Skipped: ${manifest.skipped.length}`);
   lines.push(`Redacted files: ${manifest.redaction.filesRedacted}`);
+  lines.push(`Security allowed: ${manifest.governance.securityAllowed}`);
+  lines.push(`Quality gate: ${manifest.governance.qualityGateOk}`);
+  lines.push(`Completion blocked: ${manifest.governance.completionBlocked}`);
   lines.push('');
   lines.push('## Contents');
   if (!manifest.artifacts.length) lines.push('- none');

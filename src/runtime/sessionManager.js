@@ -1,8 +1,7 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const net = require('net');
 const { discoverProject, selectCommands } = require('../discovery');
 const { loadConfig, saveDiscovery, createRun, updateRunStatus, kodexPath, loadErrors, learnFromGateFailures } = require('../kodexStore');
@@ -14,12 +13,11 @@ const { runCommand } = require('../sessionRunner');
 const { scanDiff, renderSecurityReport } = require('../security');
 const { createQaReport, renderQaReport, decideFinalStatus } = require('../run');
 const { summarizeCommandResult, tail } = require('../commandResult');
-const { spawnSync } = require('child_process');
 const { withSessionToken } = require('./controlToken');
 const { runLintguardGate } = require('../lintguard/gate');
 const { runQualityGateAsGate } = require('../gates/qualityGate');
 const { prepareRuntimeSecurity } = require('./sessionSecurity');
-
+const { collectRunGovernance } = require('../governance/summary');
 async function startAgentSession(options) {
   const root = path.resolve(options.root || process.cwd());
   const task = String(options.task || '').trim();
@@ -248,7 +246,7 @@ async function finalizeSession(root, idOrLast = 'last', options = {}) {
       continue;
     }
     if (gateCommand.gate === 'quality') {
-      gateResults.push(await runQualityGateAsGate(root, gateOutputDir, { mode, yes, timeoutMs }));
+      gateResults.push(await runQualityGateAsGate(root, gateOutputDir, { mode, yes, timeoutMs, runDir }));
       continue;
     }
     if (gateCommand.skipped) {
@@ -296,10 +294,11 @@ async function finalizeSession(root, idOrLast = 'last', options = {}) {
       durationMs: session.startedAt && session.endedAt ? Date.parse(session.endedAt) - Date.parse(session.startedAt) : undefined,
     },
   };
-  const qa = createQaReport({ task: session.task, gateResults, agentRun, security, diffStat });
+  const governance = collectRunGovernance(root, runDir, { gateResults });
+  const qa = createQaReport({ task: session.task, gateResults, agentRun, security, diffStat, governance });
   writeJson(path.join(runDir, 'qa-report.json'), qa);
   writeText(path.join(runDir, 'qa-report.md'), renderQaReport(qa));
-  const finalStatus = decideFinalStatus({ agentRun, gateResults, security, gates });
+  const finalStatus = decideFinalStatus({ agentRun, gateResults, security, gates, governance });
   const finalReport = createReleaseNotes({ task: session.task, status: finalStatus, gateResults, security, diffStat });
   writeText(path.join(runDir, 'final-report.md'), finalReport);
   const status = updateRunStatus(runDir, {
@@ -308,6 +307,7 @@ async function finalizeSession(root, idOrLast = 'last', options = {}) {
     completedAt: new Date().toISOString(),
     sessionId: session.id,
     qa,
+    governance,
     security,
     gates: gateResults,
   });

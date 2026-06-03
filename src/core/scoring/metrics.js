@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { readJson, readText, exists } = require('../../utils');
+const { collectRunGovernance } = require('../../governance/summary');
 
 const PASS_STATUSES = new Set(['passed', 'completed_no_gates', 'completed_no_gates_discovered']);
 const GATES = ['lint', 'test', 'build', 'e2e', 'quality'];
@@ -14,8 +15,7 @@ function collectRunMetrics(input = {}) {
   const startedAt = input.startedAt || status.createdAt || run.startedAt || null;
   const endedAt = input.endedAt || status.completedAt || run.endedAt || null;
   const gates = gateSummary(gateResults);
-  const quality = qualitySummary(gateResults);
-  const securityDeniedCount = countSecurityDenials(run.dir);
+  const governance = run.governance || collectRunGovernance(input.root || process.cwd(), run.dir, { gateResults, status });
   const completion = PASS_STATUSES.has(status.status || run.status?.status);
   const diffPatch = readText(path.join(run.dir || '', 'diff.patch'), '');
   const diffStat = readText(path.join(run.dir || '', 'diff.stat'), '');
@@ -35,11 +35,14 @@ function collectRunMetrics(input = {}) {
     tokenUsage: agentResult.tokenUsage || status.tokenUsage || null,
     cost: agentResult.cost || status.cost || null,
     repairLoops: status.repairLoops ?? null,
-    securityAllowed: securityDeniedCount === 0,
-    securityDeniedCount,
-    qualityGateOk: quality ? quality.ok : null,
-    qualityViolationCount: quality ? quality.violations : 0,
-    completionBlocked: !completion && (securityDeniedCount > 0 || quality?.ok === false),
+    securityAllowed: governance.securityAllowed,
+    securityDeniedCount: governance.securityDeniedCount,
+    failedCapabilityCount: governance.failedCapabilityCount,
+    qualityGateOk: governance.qualityGateOk,
+    qualityViolationCount: governance.qualityViolationCount,
+    completionBlocked: governance.completionBlocked || (!completion && (governance.securityDeniedCount > 0 || governance.qualityGateOk === false)),
+    approvalRequiredCount: governance.approvalRequiredCount,
+    unsafeActionAttemptCount: governance.unsafeActionAttemptCount,
   };
 }
 
@@ -54,15 +57,6 @@ function gateSummary(gateResults = []) {
     out[key] = { skipped: Boolean(skipped), passed: !skipped && exitCode === 0, failed: !skipped && exitCode !== 0, exitCode };
   }
   return out;
-}
-
-function qualitySummary(gateResults = []) {
-  const gate = (gateResults || []).find((item) => item.gate === 'quality');
-  if (!gate) return null;
-  const data = gate.outputPath ? readJson(gate.outputPath, null) : null;
-  const checks = data?.checks || [];
-  const violations = checks.reduce((total, check) => total + Number(check.errors || 0), 0);
-  return { ok: Boolean(data?.ok ?? gate.result?.exitCode === 0), violations };
 }
 
 function scoreMetrics(metrics, strategy = 'balanced') {
@@ -101,20 +95,6 @@ function countApprovals(runDir) {
   if (!approvalsFile || !exists(approvalsFile)) return 0;
   const value = readJson(approvalsFile, { approvals: [] });
   return Array.isArray(value) ? value.length : (value.approvals || []).length;
-}
-
-function countSecurityDenials(runDir) {
-  const text = readText(path.join(runDir || '', 'audit-evidence.jsonl'), '');
-  if (!text.trim()) return 0;
-  return text.split(/\r?\n/).filter((line) => {
-    if (!line.trim()) return false;
-    try {
-      const item = JSON.parse(line);
-      return item.allowed === false && /denied|capability|security/i.test(String(item.type || ''));
-    } catch (_) {
-      return false;
-    }
-  }).length;
 }
 
 function parseChangedFiles(diffStat) {

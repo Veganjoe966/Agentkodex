@@ -14,6 +14,7 @@ Usage:
   agentkodex run [options] "task"
   agentkodex gates run --gates lint,test,build
   agentkodex quality check [--json] [--max-file-lines 400]
+  agentkodex governance summary [last|run-id|root] [--json]
   agentkodex lintguard check [--local|--url http://127.0.0.1:8001] [--json]
   agentkodex run --runtime cockpit [options] "task"
   agentkodex swarm --builder shell --reviewer shell --qa shell "task"

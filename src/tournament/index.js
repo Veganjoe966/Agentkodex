@@ -25,10 +25,10 @@ async function runTournament(options) {
   for (const agent of agents) {
     const startedAt = new Date().toISOString();
     const workDir = path.join(tournamentDir, 'workspaces', agent);
-    const capability = options.capabilities?.[agent] || issueTournamentCapability(root, { tournamentId: id, agentId: agent, cwd: workDir });
-    const decision = verifyCapability(root, capability, { sessionId: `tournament:${id}:1:${agent}`, agentId: agent, phase: 'tournament', action: 'contestant:run', path: workDir });
+    const capability = options.capabilities?.[agent] || issueTournamentCapability(root, { tournamentId: id, agentId: agent, cwd: workDir, runDir: tournamentDir });
+    const decision = verifyCapability(root, capability, { sessionId: `tournament:${id}:1:${agent}`, agentId: agent, phase: 'tournament', action: 'contestant:run', path: workDir, runDir: tournamentDir });
     if (!decision.allowed) {
-      const metrics = { agent, task, status: 'denied', completion: false, securityAllowed: false, securityDeniedCount: 1, qualityGateOk: null, qualityViolationCount: 0, completionBlocked: true };
+      const metrics = { agent, task, status: 'denied', completion: false, securityAllowed: false, securityDeniedCount: 1, failedCapabilityCount: 1, approvalRequiredCount: 0, unsafeActionAttemptCount: 1, qualityGateOk: null, qualityViolationCount: 0, completionBlocked: true };
       recordAgentRun(root, agent, task, metrics);
       results.push({ agent, runDir: null, status: 'denied', reason: decision.reason, capabilityId: capability?.capabilityId || null, metrics });
       continue;
@@ -46,7 +46,7 @@ async function runTournament(options) {
       pty: options.pty,
     });
     const endedAt = new Date().toISOString();
-    const metrics = collectRunMetrics({ run, agent, task, startedAt, endedAt });
+    const metrics = collectRunMetrics({ root: workDir, run, agent, task, startedAt, endedAt });
     recordAgentRun(root, agent, task, metrics);
     results.push({ agent, runDir: run.dir, status: run.status.status, capability, metrics });
   }

@@ -27,8 +27,8 @@ async function runSwarm(options = {}) {
       results.push({ phase, agent, status: 'skipped', reason: `${agent} swarm phase requires --${phase}-command or --command` });
       continue;
     }
-    const capability = options.capabilities?.[phase] || issueSwarmCapability(root, { swarmId: id, phase, agentId: agent, cwd: root });
-    const decision = verifyCapability(root, capability, { sessionId: `swarm:${id}:${phase}:${agent}`, agentId: agent, phase: 'swarm', action: 'phase:execute', path: root });
+    const capability = options.capabilities?.[phase] || issueSwarmCapability(root, { swarmId: id, phase, agentId: agent, cwd: root, runDir: dir });
+    const decision = verifyCapability(root, capability, { sessionId: `swarm:${id}:${phase}:${agent}`, agentId: agent, phase: 'swarm', action: 'phase:execute', path: root, runDir: dir });
     if (!decision.allowed) {
       results.push({ phase, agent, status: 'denied', reason: decision.reason, capabilityId: capability?.capabilityId || null });
       continue;

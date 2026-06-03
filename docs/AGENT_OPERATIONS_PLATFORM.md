@@ -28,6 +28,8 @@ Agentguard-scoped capabilities are issued by Agentkodex through `src/capabilitie
   "allowedPaths": ["/repo"],
   "expiresAt": "2026-06-03T00:00:00.000Z",
   "issuedBy": "agentguard",
+  "algorithm": "ed25519",
+  "keyId": "ak_...",
   "signature": "..."
 }
 ```
@@ -42,6 +44,47 @@ Checks are not helper-only. They sit directly before process execution in:
 - `src/audit/bundle.js` for audit helper `git` and `zip` subprocesses
 
 Failed capability validation writes audit evidence before returning.
+
+New capabilities are signed natively in Node with Ed25519. Agentkodex stores signing and verification keys under `.agentkodex/runtime/capability-keys.json`, chmods the key store to `0600` where supported, keeps retired public keys available for verification, and records key rotation evidence. Legacy HMAC capabilities remain accepted during migration and emit `legacy_capability_used` audit evidence.
+
+## Governance Loop
+
+The governance loop is:
+
+```text
+Agent execution
+  -> capability validation
+  -> security gate
+  -> quality gate
+  -> audit evidence
+  -> scorecards
+  -> routing decisions
+  -> completion enforcement
+```
+
+`src/governance/summary.js` derives the canonical governance fields from run-local audit evidence and gate results:
+
+```json
+{
+  "securityAllowed": true,
+  "securityDeniedCount": 0,
+  "failedCapabilityCount": 0,
+  "qualityGateOk": true,
+  "qualityViolationCount": 0,
+  "completionBlocked": false,
+  "approvalRequiredCount": 0,
+  "unsafeActionAttemptCount": 0
+}
+```
+
+Use:
+
+```bash
+agentkodex governance summary
+agentkodex governance summary --json
+```
+
+Completion is blocked when capability validation fails, the security gate denies, quality fails, or governance evidence already marks completion as blocked.
 
 ## Quality Gate
 
@@ -135,7 +178,7 @@ It returns:
 ```
 
 The gate is deny-by-default for unknown dangerous actions and blocked commands. Command authorization reuses Agentkodex policy plus the Agentguard JSON bridge when Agentguard is available.
-Security decisions, denied actions, and failed capability checks are written to `.agentkodex/audit/evidence.jsonl` and run-local `audit-evidence.jsonl` when a run directory is available.
+Security decisions, denied actions, capability issuance/validation, legacy capability warnings, key rotations, and failed capability checks are written to `.agentkodex/audit/evidence.jsonl` and run-local `audit-evidence.jsonl` when a run directory is available.
 
 ## Agent Workflow
 
@@ -152,7 +195,7 @@ agentkodex run --gates quality "complete the task"
 agentkodex session finalize last --gates quality
 ```
 
-If the quality gate fails, completion remains blocked through the normal `failed_gates` status.
+If the quality gate fails, completion remains blocked through the normal `failed_gates` status. Audit bundles include governance fields in `manifest.json`, and routing scorecards use governance history as modest score adjustments rather than permanent bans.
 
 ## CI Workflow
 
@@ -177,7 +220,7 @@ The integration must not add:
 
 ## Remaining Risks
 
-- Agentguard capability-token validation is bridged through the Python package when available; the Node security gate is still a compatibility interface.
+- Python Agentguard remains optional. Agentkodex now owns native issuing, signature validation, expiration checks, action/path checks, and audit evidence for capabilities.
 - Complexity, circular dependency, dead import, and dependency-hygiene checks are planned but not yet exhaustive.
 - External agent CLIs can still emit sensitive data; Agentkodex redacts before logs, but upstream tools may also write their own files.
 
@@ -186,7 +229,6 @@ The integration must not add:
 Next integration step:
 
 1. Move Lintguard architecture rules into a reusable rule pack.
-2. Move capability signing from the Node compatibility signer to first-class Python Agentguard token verification when running with Agentguard installed.
-3. Expand evidence bundle rendering with a human-readable security timeline.
-4. Add dependency hygiene, circular dependency, and dead import checks.
-5. Feed quality/security outcomes into routing scorecards.
+2. Expand evidence bundle rendering with a human-readable security timeline.
+3. Add dependency hygiene, circular dependency, and dead import checks.
+4. Add explicit capability key-rotation CLI controls once rotation policy is finalized.
