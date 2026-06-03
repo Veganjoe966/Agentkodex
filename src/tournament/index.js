@@ -2,7 +2,7 @@
 
 const path = require('path');
 const { runTask } = require('../run');
-const { ensureKodex, kodexPath } = require('../kodexStore');
+const { ensureKodex, kodexPath, loadConfig } = require('../kodexStore');
 const { copyDirFiltered, ensureDir, timestampId, slugify, writeJson, writeText } = require('../utils');
 const { collectRunMetrics, selectWinner } = require('../core/scoring/metrics');
 const { recordAgentRun } = require('../scorecards/store');
@@ -17,6 +17,7 @@ async function runTournament(options) {
   if (!agents.length) throw new Error('Missing agents. Example: --agents codex,claude-code');
 
   ensureKodex(root);
+  const parentConfig = loadConfig(root);
   const id = options.id || `${timestampId()}-${slugify(task, 40)}`;
   const tournamentDir = kodexPath(root, 'tournaments', id);
   ensureDir(path.join(tournamentDir, 'workspaces'));
@@ -38,6 +39,7 @@ async function runTournament(options) {
       root: workDir,
       task,
       agent,
+      config: cloneConfig(parentConfig),
       mode: options.mode || 'sandbox_auto',
       gates: options.gates || ['lint', 'test', 'build'],
       yes: true,
@@ -73,6 +75,10 @@ function writeArtifacts(tournamentDir, summary) {
   writeJson(path.join(tournamentDir, 'results.json'), summary.results);
   writeJson(path.join(tournamentDir, 'scorecard.json'), { winner: summary.winner, winnerStrategy: summary.winnerStrategy, results: summary.results.map(({ agent, score, metrics }) => ({ agent, score, metrics })) });
   writeText(path.join(tournamentDir, 'summary.md'), renderTournamentSummary(summary));
+}
+
+function cloneConfig(config) {
+  return JSON.parse(JSON.stringify(config || {}));
 }
 
 module.exports = {

@@ -2,6 +2,26 @@
 
 Agentkodex is the orchestrator. Agentguard is the security and permission brain. Lintguard is the engineering-quality governor.
 
+The customer-facing product is chat-first:
+
+```bash
+agentkodex setup
+agentkodex ask "Explain this project"
+agentkodex chat
+```
+
+Tournaments, swarms, routing, scorecards, capabilities, audit bundles, Agentguard, and Lintguard remain backend infrastructure. Normal users should not need to understand those terms before getting a useful answer or patch.
+
+```text
+Prompt
+  -> ready configured agents
+  -> isolated candidate answers or patches
+  -> security and quality evidence
+  -> deterministic scorer or optional judge
+  -> winner response
+  -> audit/cache/history
+```
+
 This integration keeps those roles separate:
 
 ```text

@@ -27,6 +27,11 @@ const { governanceCommand } = require('./governance/command');
 const { keysCommand } = require('./keys/command');
 const { policyCommand } = require('./policy/command');
 const { releaseCommand } = require('./release/command');
+const { setupCommand } = require('./setup/agentSetup');
+const { askCommand } = require('./ask/command');
+const { chatCommand } = require('./chat/command');
+const { isFailureStatus, setExitCodeForFailure } = require('./statusContract');
+const { reconcileRunStatus } = require('./runtime/lifecycle');
 
 async function main(argv) {
   const [command = 'help', ...rest] = argv;
@@ -36,8 +41,13 @@ async function main(argv) {
     case 'discover':
       return discoverCommand(rest);
     case 'quickstart':
-    case 'setup':
       return quickstartCommand(rest);
+    case 'setup':
+      return setupCommand(rest);
+    case 'ask':
+      return askCommand(rest);
+    case 'chat':
+      return chatCommand(rest);
     case 'run':
       return runCommand(rest);
     case 'gates':
@@ -101,7 +111,7 @@ async function main(argv) {
     case 'help':
     case '--help':
     case '-h':
-      console.log(helpText());
+      console.log(helpText(rest[0] === 'all' ? 'all' : 'short'));
       return;
     case 'version':
     case '--version':
@@ -139,7 +149,10 @@ async function discoverCommand(argv) {
   ensureKodex(root);
   const discovery = discoverProject(root);
   saveDiscovery(root, discovery);
-  if (booleanFlag(flags, 'json')) console.log(JSON.stringify(discovery, null, 2));
+  const agents = booleanFlag(flags, 'verifyAgents') || booleanFlag(flags, 'verify-agents')
+    ? await detectConfiguredAgents(loadConfig(root))
+    : null;
+  if (booleanFlag(flags, 'json')) console.log(JSON.stringify({ ...discovery, agents }, null, 2));
   else {
     console.log(`Project: ${discovery.projectName}`);
     console.log(`Languages: ${discovery.languages.join(', ') || 'unknown'}`);
@@ -147,6 +160,10 @@ async function discoverCommand(argv) {
     console.log(`Package manager: ${discovery.packageManager || 'unknown'}`);
     console.log('Commands:');
     for (const command of discovery.commands) console.log(`- ${command.name}: ${command.command} (${command.evidence})`);
+    if (agents) {
+      console.log('Agents:');
+      for (const agent of agents) console.log(`- ${agent.id}: ${agent.ready ? 'ready' : agent.readinessState || 'missing'}`);
+    }
     console.log(`Saved: ${kodexPath(root, 'project.kodex.md')}`);
   }
 }
@@ -177,13 +194,14 @@ async function runCommand(argv) {
     pty: booleanFlag(flags, 'pty'),
   });
   if (booleanFlag(flags, 'json')) console.log(JSON.stringify(result.status, null, 2));
+  setExitCodeForFailure(isFailureStatus(result.status.status));
 }
 
 async function tournamentCommand(argv) {
   const { flags, positionals } = parseArgs(argv);
   const root = cwdFromFlags(flags);
   const task = positionals.join(' ').trim() || stringFlag(flags, 'task', '');
-  await runTournament({
+  const result = await runTournament({
     root,
     task,
     agents: listFlag(flags, 'agents', []),
@@ -193,6 +211,7 @@ async function tournamentCommand(argv) {
     echo: !booleanFlag(flags, 'quiet'),
     pty: booleanFlag(flags, 'pty'),
   });
+  setExitCodeForFailure(!result.results?.length || result.results.some((item) => isFailureStatus(item.status) || item.status === 'skipped'));
 }
 
 async function replayCommand(argv) {
@@ -209,7 +228,7 @@ async function statusCommand(argv) {
   const root = cwdFromFlags(flags);
   const run = resolveRun(root, positionals[0] || 'last');
   if (!run) throw new Error('No Agentkodex run found.');
-  const status = readJson(path.join(run.dir, 'status.json'), {});
+  const status = reconcileRunStatus(root, readJson(path.join(run.dir, 'status.json'), {}));
   if (booleanFlag(flags, 'json')) console.log(JSON.stringify(status, null, 2));
   else {
     console.log(`Run: ${run.id}`);
@@ -220,6 +239,7 @@ async function statusCommand(argv) {
     console.log(`Runtime: ${status.runtime || 'oneshot'}`);
     console.log(`Directory: ${run.dir}`);
   }
+  setExitCodeForFailure(isFailureStatus(status.status));
 }
 
 async function reportCommand(argv) {
@@ -230,7 +250,9 @@ async function reportCommand(argv) {
 }
 
 async function agentsCommand(argv) {
-  const [sub = 'list', ...rest] = argv;
+  const first = argv[0] && !String(argv[0]).startsWith('-') ? argv[0] : 'list';
+  const rest = first === 'list' ? argv.slice(argv[0] && !String(argv[0]).startsWith('-') ? 1 : 0) : argv.slice(1);
+  const sub = first;
   const { flags, positionals } = parseArgs(rest);
   const root = cwdFromFlags(flags);
   ensureKodex(root);
@@ -239,6 +261,12 @@ async function agentsCommand(argv) {
   if (sub === 'scorecards') return scorecardsCommand(rest);
 
   if (sub === 'list') {
+    if (booleanFlag(flags, 'json')) {
+      const agents = [];
+      for (const id of Object.keys(config.agents || {})) agents.push(await detectAgent(config, id));
+      console.log(JSON.stringify({ ok: true, agents }, null, 2));
+      return;
+    }
     console.log(renderAgentTable(config));
     return;
   }
@@ -330,9 +358,19 @@ async function doctorCommand(argv) {
   console.log('agents:');
   for (const id of Object.keys(config.agents || {})) {
     const detection = await detectAgent(config, id);
-    console.log(`- ${id}: ${detection.installed ? 'available' : 'missing'}${detection.binary ? ` (${detection.binary})` : ''}`);
+    const state = detection.ready ? 'ready' : detection.installed ? detection.readinessState || 'degraded' : 'missing';
+    console.log(`- ${id}: ${state}${detection.binary ? ` (${detection.binary})` : ''} - ${detection.readiness?.hint || detection.reason || ''}`);
   }
   if (!exists(kodexPath(root, 'commands.kodex.json'))) console.log('hint: run agentkodex discover to populate project command memory.');
+}
+
+async function detectConfiguredAgents(config) {
+  const rows = [];
+  for (const id of Object.keys(config.agents || {})) {
+    const detection = await detectAgent(config, id);
+    rows.push({ id, ready: detection.ready, installed: detection.installed, readinessState: detection.readinessState, binary: detection.binary || null });
+  }
+  return rows;
 }
 
 module.exports = { main, helpText };

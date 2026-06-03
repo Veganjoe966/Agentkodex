@@ -8,6 +8,7 @@ const { runGateCommands, renderGateReport } = require('./gates');
 const { createQaReport, renderQaReport } = require('./run');
 const { scanDiff, renderSecurityReport } = require('./security');
 const { writeJson, writeText } = require('./utils');
+const { setExitCodeForFailure } = require('./statusContract');
 
 function cwdFromFlags(flags) {
   return path.resolve(stringFlag(flags, 'repo', stringFlag(flags, 'cwd', process.cwd())));
@@ -51,6 +52,7 @@ async function gatesCommand(argv) {
     console.log(renderGateReport(gateResults));
     console.log(`Run directory: ${run.dir}`);
   }
+  setExitCodeForFailure(!qa.pass);
 }
 
 module.exports = {

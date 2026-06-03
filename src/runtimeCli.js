@@ -22,6 +22,7 @@ const {
   renderSessionList,
 } = require('./runtime/sessionManager');
 const { listApprovals, resolveApproval, markApproval } = require('./runtime/approvalQueue');
+const { gateResultsFailed, isFailureStatus, setExitCodeForFailure } = require('./statusContract');
 
 function cwdFromFlags(flags) {
   return path.resolve(stringFlag(flags, 'repo', stringFlag(flags, 'cwd', process.cwd())));
@@ -123,6 +124,7 @@ async function sessionStartCommand(argv) {
     const timeoutMs = Number(stringFlag(flags, 'timeoutMs', stringFlag(flags, 'timeout-ms', '1800000')));
     const final = await waitForExit(root, session.id, timeoutMs);
     console.log(`Final status: ${final ? final.status : 'unknown'}/${final ? final.state : 'unknown'} exit=${final ? final.exitCode : 'unknown'}`);
+    setExitCodeForFailure(final && final.exitCode !== undefined && Number(final.exitCode) !== 0);
     const shouldFinalize = !booleanFlag(flags, 'noFinalize') && !booleanFlag(flags, 'no-finalize') && !(Array.isArray(gates) && gates.includes('none'));
     if (shouldFinalize) {
       const finalized = await finalizeSession(root, session.id, {
@@ -135,6 +137,7 @@ async function sessionStartCommand(argv) {
       });
       console.log(`Finalized run: ${finalized.status.status}`);
       console.log(`Final report: ${path.join(finalized.runDir, 'final-report.md')}`);
+      setExitCodeForFailure(isFailureStatus(finalized.status.status));
     }
   }
 }
@@ -194,6 +197,7 @@ async function sessionStatusCommand(argv) {
   if (!session) throw new Error('No Agentkodex session found.');
   if (booleanFlag(flags, 'json')) console.log(JSON.stringify(session, null, 2));
   else renderSessionStatus(session);
+  setExitCodeForFailure(isFailureStatus(session.status));
 }
 
 function renderSessionStatus(session) {
@@ -281,6 +285,7 @@ async function sessionGatesCommand(argv) {
       else console.log(`- ${gate.gate}: exit=${gate.result && gate.result.exitCode} command=${gate.command}`);
     }
   }
+  setExitCodeForFailure(gateResultsFailed(result));
 }
 
 async function sessionFinalizeCommand(argv) {
@@ -306,6 +311,7 @@ async function sessionFinalizeCommand(argv) {
     console.log(`Run directory: ${result.runDir}`);
     console.log(`Final report: ${path.join(result.runDir, 'final-report.md')}`);
   }
+  setExitCodeForFailure(isFailureStatus(result.status.status));
 }
 
 async function approvalsCommand(argv) {

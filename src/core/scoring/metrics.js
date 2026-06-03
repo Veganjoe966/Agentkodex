@@ -20,6 +20,7 @@ function collectRunMetrics(input = {}) {
   const completion = PASS_STATUSES.has(status.status || run.status?.status);
   const diffPatch = readText(path.join(run.dir || '', 'diff.patch'), '');
   const diffStat = readText(path.join(run.dir || '', 'diff.stat'), '');
+  const changes = readJson(path.join(run.dir || '', 'changes.json'), null);
   const agentResult = readJson(path.join(run.dir || '', 'agent-result.json'), {});
   return {
     agent: input.agent || status.agent || run.agent || null,
@@ -31,8 +32,17 @@ function collectRunMetrics(input = {}) {
     gateFailCount: Object.values(gates).filter((gate) => gate && gate.failed).length,
     durationMs: durationMs(startedAt, endedAt) || sumGateDurations(gateResults),
     approvalCount: countApprovals(run.dir),
-    filesChanged: parseChangedFiles(diffStat),
-    diffSizeBytes: Buffer.byteLength(diffPatch || ''),
+    filesChanged: filesChanged(diffStat, changes),
+    filesAdded: changeNumber(changes, 'filesAdded'),
+    filesModified: changeNumber(changes, 'filesModified'),
+    filesDeleted: changeNumber(changes, 'filesDeleted'),
+    filesRenamed: changeNumber(changes, 'filesRenamed'),
+    artifactCount: changeNumber(changes, 'artifactCount'),
+    changedPaths: Array.isArray(changes?.changedPaths) ? changes.changedPaths : [],
+    mutationScanOk: changes?.mutationScanOk ?? true,
+    mutationScanError: changes?.mutationScanError || null,
+    diffSizeBytes: diffSizeBytes(diffPatch, changes),
+    changeSource: changes?.source || (diffStat || diffPatch ? 'git' : 'none'),
     tokenUsage: agentResult.tokenUsage || status.tokenUsage || null,
     cost: agentResult.cost || status.cost || null,
     repairLoops: status.repairLoops ?? null,
@@ -119,6 +129,20 @@ function parseChangedFiles(diffStat) {
   const match = /(\d+)\s+files?\s+changed/.exec(text);
   if (match) return Number(match[1]);
   return text.trim() ? null : 0;
+}
+
+function filesChanged(diffStat, changes) {
+  if (changes && Number.isFinite(Number(changes.filesChanged))) return Number(changes.filesChanged);
+  return parseChangedFiles(diffStat);
+}
+
+function diffSizeBytes(diffPatch, changes) {
+  if (changes && Number.isFinite(Number(changes.changeBytes))) return Number(changes.changeBytes);
+  return Buffer.byteLength(diffPatch || '');
+}
+
+function changeNumber(changes, key) {
+  return Number.isFinite(Number(changes?.[key])) ? Number(changes[key]) : null;
 }
 
 function collectQualitySignals(root, runDir, gateResults = []) {

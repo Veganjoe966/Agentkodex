@@ -2,10 +2,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
 const { discoverProject, selectCommands } = require('./discovery');
 const { loadConfig, saveDiscovery, createRun, updateRunStatus, kodexPath, loadErrors, learnFromGateFailures } = require('./kodexStore');
-const { readText, writeJson, writeText, exists, ensureDir, hashString, slugify } = require('./utils');
+const { readText, writeJson, writeText, ensureDir, hashString, slugify } = require('./utils');
 const { createTaskBrief, createPlan, createMissionPrompt, createReleaseNotes } = require('./prompts');
 const { getAgent, detectAgent, buildAgentCommand } = require('./agents');
 const { runCommand } = require('./sessionRunner');
@@ -16,13 +15,18 @@ const { runQualityGateAsGate } = require('./gates/qualityGate');
 const { issueRuntimeCapability } = require('./capabilities/phases');
 const { collectRunGovernance, blocksCompletion } = require('./governance/summary');
 const { writeAuditEvidence } = require('./audit/evidence');
+const {
+  snapshotWorkspace,
+  collectChangeArtifacts,
+  hasUsableGit,
+} = require('./core/scoring/changes');
 
 async function runTask(options) {
   const root = path.resolve(options.root || process.cwd());
   const task = String(options.task || '').trim();
   if (!task) throw new Error('Missing task. Example: agentkodex run "Fix failing tests"');
 
-  const config = loadConfig(root);
+  const config = options.config || loadConfig(root);
   const agentId = options.agent || config.defaultAgent || 'local';
   const mode = options.mode || config.defaultMode || 'supervised';
   const gates = options.gates || config.requiredGates || ['lint', 'test', 'build'];
@@ -60,6 +64,7 @@ async function runTask(options) {
   writeText(path.join(run.dir, 'task-brief.yaml'), taskBrief);
   writeText(path.join(run.dir, 'plan.md'), plan);
   writeText(path.join(run.dir, 'mission.prompt.md'), missionPrompt);
+  const workspaceBaseline = hasUsableGit(root) ? null : snapshotWorkspace(root);
 
   updateRunStatus(run.dir, { status: 'agent_running', files: relFiles(run.dir) });
 
@@ -119,10 +124,10 @@ async function runTask(options) {
   const learned = learnFromGateFailures(root, gateResults);
   writeJson(path.join(run.dir, 'learned-errors.json'), learned);
 
-  const diffStat = getGitOutput(root, ['diff', '--stat'], 20000);
-  const diff = getGitOutput(root, ['diff', '--'], 300000);
+  const { workspaceChanges, diffStat, diff } = collectChangeArtifacts(root, workspaceBaseline);
   writeText(path.join(run.dir, 'diff.stat'), diffStat || '');
   writeText(path.join(run.dir, 'diff.patch'), diff || '');
+  if (workspaceChanges) writeJson(path.join(run.dir, 'changes.json'), workspaceChanges);
 
   const security = scanDiff(diff || '');
   writeJson(path.join(run.dir, 'security-report.json'), security);
@@ -224,6 +229,7 @@ async function executeAgentPhase(context) {
       },
     };
   }
+  if (!detection.ready) return failedAdapterRun(context.agentId, detection, 126);
 
   const command = buildAgentCommand(detection, {
     promptFile,
@@ -269,11 +275,20 @@ async function executeAgentPhase(context) {
   return { agent: context.agentId, command, result: summarizeCommandResult(result) };
 }
 
-function getGitOutput(root, args, maxBytes) {
-  if (!exists(path.join(root, '.git'))) return '';
-  const result = spawnSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: maxBytes + 1024 });
-  const out = `${result.stdout || ''}${result.stderr || ''}`;
-  return out.length > maxBytes ? `${out.slice(0, maxBytes)}\n[truncated]\n` : out;
+function failedAdapterRun(agentId, detection, exitCode) {
+  const reason = detection.readiness?.hint || detection.reason || `Agent is not ready: ${agentId}`;
+  return {
+    agent: agentId,
+    skipped: false,
+    error: reason,
+    result: {
+      exitCode,
+      skipped: false,
+      stderrTail: reason,
+      stdoutTail: '',
+      command: detection.commandTemplate || '',
+    },
+  };
 }
 
 function gateOutputFile(outputDir, gateCommand, index) {
@@ -349,7 +364,7 @@ function decideFinalStatus({ agentRun, gateResults, security, gates, governance 
 }
 
 function relFiles(runDir) {
-  const names = ['task-brief.yaml', 'plan.md', 'mission.prompt.md', 'transcript.log', 'commands.log', 'policy.log', 'gate-results.json', 'qa-report.md', 'security-report.md', 'final-report.md', 'diff.patch'];
+  const names = ['task-brief.yaml', 'plan.md', 'mission.prompt.md', 'transcript.log', 'commands.log', 'policy.log', 'gate-results.json', 'qa-report.md', 'security-report.md', 'final-report.md', 'diff.patch', 'changes.json'];
   const out = {};
   for (const name of names) out[name.replace(/[^A-Za-z0-9]/g, '_')] = path.join(runDir, name);
   return out;

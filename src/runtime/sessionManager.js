@@ -1,5 +1,4 @@
 'use strict';
-
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const net = require('net');
@@ -18,6 +17,7 @@ const { runLintguardGate } = require('../lintguard/gate');
 const { runQualityGateAsGate } = require('../gates/qualityGate');
 const { prepareRuntimeSecurity } = require('./sessionSecurity');
 const { collectRunGovernance } = require('../governance/summary');
+const { controlRequestError } = require('./controlErrors');
 async function startAgentSession(options) {
   const root = path.resolve(options.root || process.cwd());
   const task = String(options.task || '').trim();
@@ -127,7 +127,7 @@ async function resolveSessionCommand({ root, runDir, config, agentId, task, miss
 
   const detection = await detectAgent(config, agentId);
   writeJson(path.join(runDir, 'agent-detection.json'), detection);
-  if (!detection.installed) throw new Error(detection.reason || `Agent is not installed: ${agentId}`);
+  if (!detection.ready) throw new Error(detection.readiness?.hint || detection.reason || `Agent is not ready: ${agentId}`);
 
   const command = buildAgentCommand(detection, {
     promptFile,
@@ -151,7 +151,7 @@ function requestSession(root, idOrLast, payload, options = {}) {
     let buffer = '';
     const timer = setTimeout(() => {
       try { socket.destroy(); } catch (_) {}
-      reject(new Error(`Timed out waiting for session ${session.id} at ${socketPath}`));
+      reject(controlRequestError(session, new Error('Timed out waiting for session control response.')));
     }, timeoutMs);
     timer.unref();
     socket.setEncoding('utf8');
@@ -173,7 +173,7 @@ function requestSession(root, idOrLast, payload, options = {}) {
     });
     socket.on('error', (error) => {
       clearTimeout(timer);
-      reject(error);
+      reject(controlRequestError(session, error));
     });
   });
 }

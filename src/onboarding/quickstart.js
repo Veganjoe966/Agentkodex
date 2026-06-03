@@ -57,7 +57,7 @@ async function detectConfiguredAgents(config) {
   const rows = [];
   for (const id of ids) {
     const detection = await detectAgent(config, id);
-    rows.push({ id, installed: detection.installed, reason: detection.reason, binary: detection.binary || null });
+    rows.push({ id, installed: detection.installed, ready: detection.ready, readinessState: detection.readinessState, reason: detection.readiness?.hint || detection.reason, binary: detection.binary || null });
   }
   return rows;
 }
@@ -75,10 +75,10 @@ function nextSteps(gates, route, agents = []) {
 }
 
 function sessionAgent(route, agents) {
-  if (route.selected && route.selected !== 'local') return route.selected;
+  const ready = new Set(agents.filter((agent) => agent.ready).map((agent) => agent.id));
+  if (route.selected && route.selected !== 'local' && ready.has(route.selected)) return route.selected;
   const preferred = ['codex', 'claude-code', 'aider', 'gemini', 'opencode', 'cursor', 'custom'];
-  const installed = new Set(agents.filter((agent) => agent.installed).map((agent) => agent.id));
-  return preferred.find((id) => installed.has(id)) || 'shell';
+  return preferred.find((id) => ready.has(id)) || 'shell';
 }
 
 function renderQuickstart(result) {
@@ -100,7 +100,7 @@ function renderQuickstart(result) {
   }
   lines.push('');
   lines.push('## Agent Availability');
-  for (const agent of result.agents) lines.push(`- ${agent.id}: ${agent.installed ? 'available' : 'missing'}${agent.binary ? ` (${agent.binary})` : ''} - ${agent.reason || ''}`);
+  for (const agent of result.agents) lines.push(`- ${agent.id}: ${agent.ready ? 'ready' : agent.installed ? agent.readinessState || 'degraded' : 'missing'}${agent.binary ? ` (${agent.binary})` : ''} - ${agent.reason || ''}`);
   lines.push('');
   lines.push('## Router');
   if (result.route.selected) {

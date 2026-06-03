@@ -20,6 +20,21 @@ The release gate fails closed. It runs:
 
 The gate does not publish. It validates the local tree before a human decides whether to commit, push, or publish.
 
+Run it from the Agentkodex package root. If you run it inside a customer project, it fails with an actionable hint. Customer projects should use:
+
+```bash
+agentkodex quality check
+agentkodex gates run
+```
+
+The gate checks package/docs drift before publish by validating:
+
+- `README.md`, CLI help, package metadata, and changelog version alignment
+- documented command coverage in the packed artifact
+- `npm pack --dry-run --json` contents
+- packed install smoke through a temporary prefix
+- installer permission-recovery logic for npm global prefix issues
+
 The gate also validates the current governance defaults:
 
 - Ed25519 capabilities are the native signing path.

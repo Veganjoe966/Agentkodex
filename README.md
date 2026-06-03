@@ -13,17 +13,17 @@
 <h1 align="center">Agentkodex</h1>
 
 <p align="center">
-  <strong>The control plane for AI coding agents.</strong><br>
-  Local-first runtime, governance, audit evidence, quality gates, scorecards, routing, tournaments, and swarm orchestration.
+  <strong>The chat-first control plane for AI coding agents.</strong><br>
+  Ask once. Agentkodex compares your coding agents, runs gates, audits evidence, and returns the best answer or patch.
 </p>
 
-Agentkodex is the control plane above coding CLIs such as Codex CLI, Claude Code, Aider, Gemini CLI, OpenCode, Cursor CLI, Copilot CLI, shell agents, and custom command agents.
+Agentkodex sits above coding CLIs such as Codex CLI, Claude Code, Aider, Gemini CLI, OpenCode, Cursor CLI, Copilot CLI, shell agents, and custom command agents.
 
-It does not pretend to be the agent. It gives agents a real terminal runtime and wraps every run with policy, memory, approvals, replay, gates, and evidence.
+It does not pretend to be the agent. It gives agents a real terminal runtime and wraps every answer or patch with policy, memory, approvals, replay, gates, caching, and evidence.
 
 ## 10-Second Explanation
 
-Agentkodex gives coding agents persistent terminals, signed capabilities, quality gates, approvals, replay, audit bundles, scorecards, routing, swarm orchestration, and tournament evaluation.
+Agentkodex lets you ask a coding question once. Behind the scenes it detects ready coding agents, compares candidate answers or patches in isolated workspaces, runs gates, selects a winner, saves audit evidence, and learns what works.
 
 ## What Agentkodex Is / Is Not
 
@@ -46,6 +46,7 @@ Agentkodex is not:
 
 ```text
 Coding CLIs
+  -> Agentkodex ask/chat
   -> Agentkodex Runtime v2
   -> Agentguard signed capabilities
   -> Lintguard quality gates
@@ -56,7 +57,7 @@ Coding CLIs
 
 ```bash
 npm install -g agentkodex
-agentkodex doctor
+agentkodex setup
 ```
 
 One-shot installer:
@@ -67,34 +68,47 @@ curl -fsSL https://raw.githubusercontent.com/Veganjoe966/Agentkodex/main/install
 
 The installer uses npm first, repairs common PATH issues without `sudo`, and falls back to the GitHub package source only if npm is unavailable.
 
+If your npm global prefix is not writable, the installer retries with a user-local npm prefix instead of repeating the same `EACCES` failure:
+
+```bash
+mkdir -p "$HOME/.npm-global"
+npm config set prefix "$HOME/.npm-global"
+export PATH="$HOME/.npm-global/bin:$PATH"
+npm install -g agentkodex
+```
+
+The README tracks the current package release. If you are reading `main` between releases, run `agentkodex --version` and check [CHANGELOG.md](CHANGELOG.md) before assuming a command is present in your installed npm package.
+
 ## First Run
 
 Run inside any project:
 
 ```bash
-agentkodex quickstart
-agentkodex discover
-agentkodex run "Inspect this project and summarize the next safe steps"
-agentkodex quality check
-agentkodex governance summary
-agentkodex audit bundle last
+agentkodex setup
+agentkodex agents
+agentkodex ask "Explain this project"
+agentkodex chat
 ```
 
-Start a persistent Runtime v2 session:
+Patch mode never mutates the host project by default:
 
 ```bash
-agentkodex session start \
-  --agent shell \
-  --command "npm test" \
-  --mode sandbox_auto \
-  --yes \
-  "Runtime smoke"
+agentkodex ask --mode patch "Fix failing tests"
+agentkodex ask --mode patch --apply-winner --yes "Fix failing tests"
 ```
 
-Replay the evidence:
+Agentkodex uses safe internal caching automatically when the same prompt and same repo state are seen again. Users do not need to manage cache commands, and cached results are rejected if the repo, config, gates, dependency state, or prior result safety changed.
+
+If a gate fails, a session fails, or a security action is denied, Agentkodex exits non-zero while keeping JSON output machine-readable:
 
 ```bash
-agentkodex session replay last
+agentkodex ask --mode patch --json "Fix failing tests"
+echo $?
+```
+
+Advanced evidence remains available:
+
+```bash
 agentkodex audit-bundle last --out ./agentkodex-audit
 agentkodex audit verify ./agentkodex-audit --json
 ```
@@ -112,7 +126,7 @@ A serious agent must touch the real project environment:
 | Project memory | `.agentkodex/` profiles for stack, commands, errors, runs, sessions, approvals, and intelligence. |
 | Completion | Lintguard quality gates, Agentguard security gates, final reports, and blocked completion states. |
 | Audit | Redacted evidence, checksummed bundles, changed files, git patches, governance summaries. |
-| Multi-agent work | Swarm phases, tournaments, scorecards, and routing based on real local history. |
+| Multi-agent work | Ask/chat comparisons, swarm phases, tournaments, scorecards, and routing based on real local history. |
 
 ## Governance Loop
 
@@ -145,6 +159,10 @@ Read the report: [docs/ADVERSARIAL_VALIDATION_REPORT.md](docs/ADVERSARIAL_VALIDA
 
 | Command | Purpose |
 | --- | --- |
+| `agentkodex setup` | Detect ready coding CLIs, preserve manual config, and save safe adapter templates. |
+| `agentkodex agents --json` | Show readiness states for configured agents. |
+| `agentkodex ask "..."` | Primary single-shot chat-first command. |
+| `agentkodex chat` | Interactive prompt loop with persisted conversation history. |
 | `agentkodex quickstart` | Initialize project memory, discover commands, rebuild intelligence, and print next steps. |
 | `agentkodex discover --json` | Detect stack, package manager, project commands, Docker, Make, Just, Taskfile, and CI evidence. |
 | `agentkodex session start` | Launch a persistent agent terminal session. |
@@ -153,11 +171,16 @@ Read the report: [docs/ADVERSARIAL_VALIDATION_REPORT.md](docs/ADVERSARIAL_VALIDA
 | `agentkodex governance summary --json` | Show security, capability, quality, approval, and completion signals. |
 | `agentkodex keys status` | Inspect Ed25519 capability key status without printing private keys. |
 | `agentkodex audit-bundle last` | Package reviewable run/session evidence. |
+| `agentkodex audit anchor <bundle>` | Append a tamper-evident anchor record for an audit bundle. |
+| `agentkodex audit verify-anchor <bundle>` | Verify an audit bundle against its anchor record. |
+| `agentkodex policy check --json` | Evaluate Agentguard policy for project actions. |
 | `agentkodex route "task"` | Select the best agent from scorecards and project intelligence. |
 | `agentkodex tournament --agents ... --task "..."` | Compare agents in isolated workspaces. |
 | `agentkodex swarm --builder ... --reviewer ... --qa ...` | Run phased multi-agent orchestration. |
 | `agentkodex cockpit` | Start the local browser cockpit for live session control. |
 | `agentkodex release gate` | Run the fail-closed release checks. |
+
+`agentkodex release gate` validates the Agentkodex package source before publishing. For customer project validation, use `agentkodex quality check` or `agentkodex gates run`.
 
 ## Runtime v2
 
@@ -170,6 +193,21 @@ agentkodex session interrupt last
 agentkodex session kill last
 agentkodex session finalize last --gates lint,test,build --yes
 ```
+
+## External Adapter Readiness
+
+Agentkodex detects external CLIs honestly, but installed does not always mean ready. `agentkodex setup`, `agentkodex agents`, `agentkodex doctor --verify-agents`, and `agentkodex discover --verify-agents` report readiness states such as `missing`, `installed_not_authenticated`, `installed_not_noninteractive_ready`, `smoke_failed`, `ready`, `manually_configured`, and `degraded`.
+
+If Codex, Claude Code, Gemini, OpenCode, Cursor, Copilot, Aider, or a custom tool needs a prompt flag, auth, or TTY behavior, configure the launch template instead of relying on binary detection:
+
+```bash
+agentkodex agents set custom --cmd "your-agent --file {promptFile}"
+agentkodex agents detect custom
+```
+
+Scorecards and routing need real local run history. Until enough evidence exists, routing may say `insufficient history` or choose a conservative fallback.
+
+Agentkodex does not hardcode OpenRouter, OpenAI, Anthropic, or other provider keys. Local CLIs are preferred. BYOK provider setups may be added by user configuration, but Agentkodex does not ship shared provider secrets or scrape external CLI credentials.
 
 Runtime artifacts are stored locally:
 

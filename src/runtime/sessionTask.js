@@ -64,7 +64,7 @@ async function prepareAgentSessionTask(options = {}) {
 
   writeJson(path.join(run.dir, 'agent-detection.json'), detection || {});
   if (!command) throw new Error(`No command could be built for agent ${agentId}. Use --command, --shell-command, or configure: agentkodex agents set ${agentId} --cmd "..."`);
-  if (detection && detection.installed === false) throw new Error(detection.reason || `Agent not installed: ${agentId}`);
+  if (detection && detection.ready === false) throw new Error(detection.readiness?.hint || detection.reason || `Agent not ready: ${agentId}`);
 
   updateRunStatus(run.dir, {
     status: 'session_ready',

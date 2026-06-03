@@ -50,7 +50,7 @@ async function resolveSessionAdapter(config, input) {
   }
 
   const detection = await detectAgent(config, agentId);
-  if (!detection.installed) {
+  if (!detection.ready) {
     return {
       id: agentId,
       kind: detection.adapterKind || 'template',

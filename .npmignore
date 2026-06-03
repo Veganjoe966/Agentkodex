@@ -9,3 +9,4 @@ tests/
 *.bak
 .DS_Store
 npm-test-output.txt
+docs/CODEX_CUSTOMER_EXPERIENCE_REVIEW.md

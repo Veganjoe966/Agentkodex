@@ -68,7 +68,7 @@ async function startSession(options) {
       status: 'failed',
       state: 'failed',
       command: adapter.command || '',
-      lastStateReason: adapter.detection?.reason || 'Adapter not installed or no command configured.',
+      lastStateReason: adapter.detection?.readiness?.hint || adapter.detection?.reason || 'Adapter not installed or no command configured.',
       completedAt: new Date().toISOString(),
     });
     updateRunStatus(run.dir, { status: 'session_failed', sessionId: prepared.id, error: prepared.lastStateReason });

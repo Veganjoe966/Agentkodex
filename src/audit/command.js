@@ -30,6 +30,7 @@ async function auditBundleCommand(argv) {
 
 async function auditCommand(argv) {
   const [sub = 'bundle', ...rest] = argv;
+  if (sub === '--help' || sub === '-h' || sub === 'help') return console.log(auditHelp());
   if (sub === 'bundle') return auditBundleCommand(rest);
   if (sub === 'verify') return auditVerifyCommand(rest);
   if (sub === 'anchor') return auditAnchorCommand(rest);
@@ -38,6 +39,7 @@ async function auditCommand(argv) {
 }
 
 async function auditVerifyCommand(argv) {
+  if (argv.includes('--help') || argv.includes('-h')) return console.log('Usage: agentkodex audit verify <bundle-dir> [--json]');
   const { flags, positionals } = parseArgs(argv);
   const root = cwdFromFlags(flags);
   const bundleDir = positionals[0] || stringFlag(flags, 'bundle', stringFlag(flags, 'dir', ''));
@@ -53,6 +55,7 @@ async function auditVerifyCommand(argv) {
 }
 
 async function auditAnchorCommand(argv) {
+  if (argv.includes('--help') || argv.includes('-h')) return console.log('Usage: agentkodex audit anchor <bundle-dir> [--json] [--anchor-path path]');
   const { flags, positionals } = parseArgs(argv);
   const root = cwdFromFlags(flags);
   const bundleDir = positionals[0] || stringFlag(flags, 'bundle', stringFlag(flags, 'dir', ''));
@@ -67,6 +70,7 @@ async function auditAnchorCommand(argv) {
 }
 
 async function auditVerifyAnchorCommand(argv) {
+  if (argv.includes('--help') || argv.includes('-h')) return console.log('Usage: agentkodex audit verify-anchor <bundle-dir> [--json] [--anchor-path path]');
   const { flags, positionals } = parseArgs(argv);
   const root = cwdFromFlags(flags);
   const bundleDir = positionals[0] || stringFlag(flags, 'bundle', stringFlag(flags, 'dir', ''));
@@ -79,6 +83,16 @@ async function auditVerifyAnchorCommand(argv) {
     for (const warning of result.warnings) console.log(`- warning: ${warning}`);
   }
   if (!result.ok) process.exitCode = 1;
+}
+
+function auditHelp() {
+  return [
+    'Agentkodex audit commands:',
+    '  agentkodex audit bundle [last|run-id]',
+    '  agentkodex audit verify <bundle-dir> [--json]',
+    '  agentkodex audit anchor <bundle-dir> [--json] [--anchor-path path]',
+    '  agentkodex audit verify-anchor <bundle-dir> [--json] [--anchor-path path]',
+  ].join('\n');
 }
 
 function rawFlagValue(argv, name) {

@@ -1,12 +1,48 @@
 'use strict';
 
-function helpText() {
-  return `Agentkodex — CLI-native agent harness for autonomous software delivery.
+function helpText(scope = 'short') {
+  return scope === 'all' ? fullHelp() : shortHelp();
+}
 
-Usage:
+function shortHelp() {
+  return `Agentkodex — The chat-first control plane for AI coding agents.
+
+Start here:
+  agentkodex setup
+  agentkodex agents
+  agentkodex ask "Explain this project"
+  agentkodex chat
+  agentkodex doctor --verify-agents
+
+Common commands:
+  agentkodex setup [--json]
+  agentkodex agents [--json]
+  agentkodex ask [--mode answer|review|patch|auto] "request"
+  agentkodex chat [--new|--resume last|--list]
+  agentkodex doctor [--verify-agents]
+
+Advanced:
+  agentkodex help all
+
+Backend infrastructure: Runtime v2, gates, audit bundles, scorecards, routing, swarms, and tournaments.
+`;
+}
+
+function fullHelp() {
+  return `Agentkodex — The chat-first control plane for AI coding agents.
+
+Primary flow:
+  agentkodex setup
+  agentkodex ask "Explain this project"
+  agentkodex ask --mode review "Review security risks"
+  agentkodex ask --mode patch "Fix failing tests"
+  agentkodex ask --mode patch --apply-winner --yes "Fix failing tests"
+  agentkodex chat --new
+
+Advanced commands:
   agentkodex init [--cwd path]
   agentkodex quickstart [--cwd path]
-  agentkodex discover [--json] [--cwd path]
+  agentkodex discover [--json] [--verify-agents] [--cwd path]
   agentkodex intelligence show|rebuild
   agentkodex route "task"
   agentkodex plan "task"
@@ -17,8 +53,7 @@ Usage:
   agentkodex governance summary [last|run-id|root] [--json]
   agentkodex keys status|list|rotate|retire [--json]
   agentkodex lintguard check [--local|--url http://127.0.0.1:8001] [--json]
-  agentkodex run --runtime cockpit [options] "task"
-  agentkodex swarm --builder shell --reviewer shell --qa shell "task"
+  agentkodex swarm --builder shell --reviewer shell --qa shell --command "npm test" "task"
   agentkodex daemon start|stop|status|logs
   agentkodex cockpit [--port 3919] [--host 127.0.0.1] [--once|--json] [--show-token]
   agentkodex session start|list|status|send|attach|interrupt|kill|replay|gates|finalize
@@ -37,45 +72,25 @@ Usage:
   agentkodex policy check ["command to classify"] [--json]
   agentkodex release gate [--json]
   agentkodex kodex show
-  agentkodex doctor
+
+Ask options:
+  --agents <list>      ready agents to compare
+  --mode <mode>        answer, review, patch, or auto
+  --fast              use best historical ready agent
+  --compare           compare multiple ready agents
+  --max               compare all ready agents
+  --apply-winner      patch mode: apply only the winning patch
+  --yes               confirm applying the winner
+  --json              machine-readable output
 
 Run options:
   --agent <id>          local, shell, codex, claude-code, aider, gemini, opencode, cursor, copilot, custom
   --mode <mode>         observe, supervised, sandbox_auto, trusted_auto
   --gates <list>        comma list such as lint,test,build,e2e or none
   --command <cmd>       run an explicit implementation command instead of agent template
-  --custom-command      one-off custom agent command/template
-  --shell-command       one-off shell adapter command
   --runtime cockpit     start a persistent Runtime v2 agent cockpit session
-  --cockpit             alias for --runtime cockpit
-  --skip-agent          skip implementation phase and run only discovery/gates/reports
   --yes                 approve reviewed risky commands; blocked commands still fail
-  --max-complexity      quality gate complexity threshold, default 60
-  --unused-imports      quality gate dead-import mode: warn or fail
-  --analysis-mode       quality analysis mode: auto, heuristic, or parser
-  --pty                 wrap command with script(1) pseudo-terminal when available
-  --wait                with session start, wait for exit and auto-finalize
-  --no-finalize         with session start --wait, skip automatic gate finalization
-  --show-token          print Cockpit bearer token when starting the local UI
-  --unsafe-public       allow Cockpit to bind to a non-loopback host
-  --quiet               reduce live output
   --cwd, --repo <path>  project root
-
-Command template variables:
-  {promptFile} {prompt} {cwd} {runDir} {task}
-
-Examples:
-  agentkodex init
-  agentkodex quickstart
-  agentkodex route "large refactor"
-  agentkodex agents scorecards
-  agentkodex quality check
-  agentkodex lintguard check --local
-  agentkodex intelligence rebuild
-  agentkodex tournament --agents shell,custom --task "Verify current repo" --gates test
-  agentkodex swarm --builder shell --reviewer shell --qa shell "Review validation"
-  agentkodex agents set custom --cmd "my-agent --file {promptFile}"
-  agentkodex audit-bundle last
 `;
 }
 

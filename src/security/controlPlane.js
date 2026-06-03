@@ -99,7 +99,12 @@ function hardenSocket(socketPath) {
 
 function sanitizeError(error) {
   const message = error && error.message ? error.message : String(error || 'unknown error');
-  return redactSecrets(message).replace(/\s+at\s+.+/g, '');
+  return redactSecrets(message)
+    .replace(/\s+at\s+.+/g, '')
+    .replace(/\/[^\s"'<>]+\.sock\b/g, '[socket]')
+    .replace(/\/[^\s"'<>]+\/(?:src|bin|tests)\/[^\s"'<>]+/g, '[internal-path]')
+    .replace(/("signature"\s*:\s*")[^"]+"/gi, '$1[redacted]"')
+    .replace(/\bsignature[:=][A-Za-z0-9+/=_-]+/gi, 'signature=[redacted]');
 }
 
 module.exports = {

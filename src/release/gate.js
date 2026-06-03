@@ -9,17 +9,20 @@ const { createAuditBundle } = require('../audit/bundle');
 const { verifyAuditBundle } = require('../audit/verify');
 const { redactSecrets } = require('../security/redaction');
 const { readJson, writeText } = require('../utils');
+const { packageConsistencyCheck } = require('./packageConsistency');
 const BANNED_PATH_RE = new RegExp(`${escapeRegExp('/app')}/${escapeRegExp('test_project')}\\b|${escapeRegExp('/root')}/${escapeRegExp('agentguard')}\\b`, 'i');
 
 function runReleaseGate(root, options = {}) {
+  if (!isAgentkodexPackage(root) && !options.allowNonPackageRoot) return nonPackageRootResult(root);
   const checks = [];
   if (!options.skipCommands) {
     checks.push(run('npm test', root, 'npm', ['test']));
     if (hasScript(root, 'lint')) checks.push(run('npm run lint', root, 'npm', ['run', 'lint']));
     if (hasScript(root, 'typecheck')) checks.push(run('npm run typecheck', root, 'npm', ['run', 'typecheck']));
     if (hasScript(root, 'quality:gate')) checks.push(run('npm run quality:gate', root, 'npm', ['run', 'quality:gate']));
-    checks.push(run('policy check', root, process.execPath, ['bin/agentkodex.js', 'policy', 'check', '--json']));
+    checks.push(run('policy check', root, process.execPath, [path.join(root, 'bin', 'agentkodex.js'), 'policy', 'check', '--json']));
   }
+  checks.push(packageConsistencyCheck(root));
   checks.push(scanRepo(root));
   checks.push(auditBundleCheck(root));
   if (!options.skipPackageInstall) checks.push(packageInstallCheck(root));
@@ -77,7 +80,7 @@ function auditBundleCheck(root) {
 
 function packageInstallCheck(root) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'ak-release-install-'));
-  const env = { ...process.env, PATH: `${path.join(temp, 'bin')}${path.delimiter}${process.env.PATH || ''}` };
+  const env = { ...process.env, AGENTKODEX_SKIP_PATH_REPAIR: '1', PATH: `${path.join(temp, 'bin')}${path.delimiter}${process.env.PATH || ''}` };
   const install = run('package install', root, 'npm', ['install', '-g', '--prefix', temp, '.'], { env });
   if (!install.ok) return install;
   const bin = path.join(temp, 'bin', process.platform === 'win32' ? 'agentkodex.cmd' : 'agentkodex');
@@ -86,11 +89,55 @@ function packageInstallCheck(root) {
 
 function cliSmokeCheck(root) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'ak-release-cli-'));
-  const help = run('CLI help', root, process.execPath, ['bin/agentkodex.js', '--help']);
-  const quality = run('quality JSON smoke', root, process.execPath, ['bin/agentkodex.js', 'quality', 'check', '--cwd', temp, '--json']);
-  const policy = run('policy JSON smoke', root, process.execPath, ['bin/agentkodex.js', 'policy', 'check', '--json']);
-  const ok = help.ok && quality.ok && policy.ok;
-  return { name: 'cli-smoke', ok, errors: ok ? 0 : 1, warnings: 0, details: [help, quality, policy].filter((item) => !item.ok).map((item) => `${item.name}: ${item.details}`) };
+  const bin = path.join(root, 'bin', 'agentkodex.js');
+  const help = run('CLI help', root, process.execPath, [bin, '--help']);
+  const quality = run('quality JSON smoke', root, process.execPath, [bin, 'quality', 'check', '--cwd', temp, '--json']);
+  const policy = run('policy JSON smoke', root, process.execPath, [bin, 'policy', 'check', '--json']);
+  const setup = run('setup JSON smoke', root, process.execPath, [bin, 'setup', '--cwd', temp, '--json'], { env: safeSmokeEnv() });
+  const askRoot = prepareAskSmokeProject(temp);
+  const agents = run('agents JSON smoke', root, process.execPath, [bin, 'agents', '--cwd', askRoot, '--json']);
+  const ask = run('ask JSON smoke', root, process.execPath, [bin, 'ask', '--cwd', askRoot, '--agents', 'helper', '--json', 'Explain']);
+  const chat = run('chat help smoke', root, process.execPath, [bin, 'chat', '--help']);
+  const checks = [help, quality, policy, setup, agents, ask, chat];
+  const ok = checks.every((item) => item.ok);
+  return { name: 'cli-smoke', ok, errors: ok ? 0 : 1, warnings: 0, details: checks.filter((item) => !item.ok).map((item) => `${item.name}: ${item.details}`) };
+}
+
+function prepareAskSmokeProject(parent) {
+  const dir = path.join(parent, 'ask-smoke');
+  fs.mkdirSync(path.join(dir, 'scripts'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '.agentkodex'), { recursive: true });
+  writeText(path.join(dir, 'package.json'), JSON.stringify({ name: 'ask-smoke', private: true }, null, 2));
+  writeText(path.join(dir, 'scripts', 'helper.js'), 'console.log("release gate answer")\n');
+  writeText(path.join(dir, '.agentkodex', 'config.json'), JSON.stringify({
+    version: 2,
+    agents: {
+      helper: { kind: 'custom', commandTemplate: 'node scripts/helper.js', stdin: false },
+    },
+  }, null, 2));
+  return dir;
+}
+
+function safeSmokeEnv() {
+  return { ...process.env, PATH: ['/bin', '/usr/bin'].join(path.delimiter) };
+}
+
+function isAgentkodexPackage(root) {
+  return readJson(path.join(root, 'package.json'), {}).name === 'agentkodex' && fs.existsSync(path.join(root, 'bin', 'agentkodex.js'));
+}
+
+function nonPackageRootResult(root) {
+  return {
+    ok: false,
+    summary: 'Release gate failed.',
+    checks: [{
+      name: 'release-root',
+      ok: false,
+      errors: 1,
+      warnings: 0,
+      details: [`${root} is not the Agentkodex package root. Run project quality checks with "agentkodex quality check" or "agentkodex gates run".`],
+    }],
+  };
 }
 
 function packagedFiles(root) {

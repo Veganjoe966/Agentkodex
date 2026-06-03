@@ -6,6 +6,7 @@ GITHUB_REPO="${AGENTKODEX_GITHUB_REPO:-Veganjoe966/Agentkodex}"
 GITHUB_REF="${AGENTKODEX_GITHUB_REF:-main}"
 SOURCE="${AGENTKODEX_INSTALL_SOURCE:-npm}"
 FALLBACK=1
+LAST_INSTALL_LOG=""
 
 banner() {
   cat <<'EOF'
@@ -16,7 +17,7 @@ banner() {
  / ___ \ |_| | |___| |\  | | | | . \ | |_| | |_| | |___  /  \
 /_/   \_\____|_____|_| \_| |_| |_|\_\ \___/|____/|_____/_/\_\
 
-  CLI-native agent operations runtime
+  The chat-first control plane for AI coding agents.
 
 EOF
 }
@@ -78,11 +79,17 @@ can_animate() {
 run_with_animation() {
   label="$1"
   shift
-  if ! can_animate; then
-    "$@"
-    return $?
-  fi
   log_file="${TMPDIR:-/tmp}/agentkodex-install.$$.log"
+  if ! can_animate; then
+    if "$@" >"$log_file" 2>&1; then
+      [ "${AGENTKODEX_VERBOSE:-0}" = "1" ] && cat "$log_file"
+      rm -f "$log_file"
+      return 0
+    fi
+    LAST_INSTALL_LOG="$log_file"
+    summarize_install_error "$log_file" >&2
+    return 1
+  fi
   set +e
   "$@" >"$log_file" 2>&1 &
   pid=$!
@@ -108,9 +115,25 @@ run_with_animation() {
     return 0
   fi
   printf '\r[!!] %s\n' "$label" >&2
-  cat "$log_file" >&2
-  rm -f "$log_file"
+  LAST_INSTALL_LOG="$log_file"
+  summarize_install_error "$log_file" >&2
   return "$status"
+}
+
+summarize_install_error() {
+  file="$1"
+  if grep -Eiq 'EACCES|permission denied|access denied' "$file"; then
+    say "npm could not write to the current global prefix."
+    say "Agentkodex will use a user-local npm prefix instead of sudo when possible."
+    [ "${AGENTKODEX_VERBOSE:-0}" = "1" ] && cat "$file"
+    return 0
+  fi
+  say "Install command failed. Re-run with AGENTKODEX_VERBOSE=1 for full npm output."
+  tail -n 12 "$file" 2>/dev/null || true
+}
+
+last_failure_was_eacces() {
+  [ -n "$LAST_INSTALL_LOG" ] && [ -f "$LAST_INSTALL_LOG" ] && grep -Eiq 'EACCES|permission denied|access denied' "$LAST_INSTALL_LOG"
 }
 
 need_cmd() {
@@ -141,6 +164,28 @@ install_from_npm() {
 install_from_github() {
   package_spec="github:$GITHUB_REPO#$GITHUB_REF"
   run_with_animation "Installing Agentkodex from GitHub fallback: $package_spec" npm install -g "$package_spec"
+}
+
+user_npm_prefix() {
+  printf '%s\n' "${AGENTKODEX_USER_PREFIX:-$HOME/.npm-global}"
+}
+
+prepare_user_prefix() {
+  prefix="$(user_npm_prefix)"
+  mkdir -p "$prefix"
+  export NPM_CONFIG_PREFIX="$prefix"
+  say "Using user-local npm prefix: $prefix"
+  say "This avoids sudo and avoids retrying the same non-writable global path."
+}
+
+retry_npm_with_user_prefix() {
+  prepare_user_prefix
+  install_from_npm
+}
+
+retry_github_with_user_prefix() {
+  prepare_user_prefix
+  install_from_github
 }
 
 npm_prefix() {
@@ -236,17 +281,41 @@ main() {
         verify_install
         exit 0
       fi
+      if last_failure_was_eacces; then
+        if retry_npm_with_user_prefix; then
+          verify_install
+          exit 0
+        fi
+        say "User-local npm install still failed. Try:" >&2
+        say "  mkdir -p \"$(user_npm_prefix)\"" >&2
+        say "  npm config set prefix \"$(user_npm_prefix)\"" >&2
+        say "  export PATH=\"$(user_npm_prefix)/bin:\$PATH\"" >&2
+        say "  npm install -g $PACKAGE_NAME" >&2
+        exit 1
+      fi
       if [ "$FALLBACK" -eq 1 ]; then
-        say "npm registry install failed; trying GitHub fallback."
-        install_from_github
-        verify_install
-        exit 0
+        say "npm registry install failed for a non-permission reason; trying GitHub fallback."
+        if install_from_github; then
+          verify_install
+          exit 0
+        fi
+        if last_failure_was_eacces && retry_github_with_user_prefix; then
+          verify_install
+          exit 0
+        fi
       fi
       exit 1
       ;;
     github)
-      install_from_github
-      verify_install
+      if install_from_github; then
+        verify_install
+        exit 0
+      fi
+      if last_failure_was_eacces && retry_github_with_user_prefix; then
+        verify_install
+        exit 0
+      fi
+      exit 1
       ;;
     *)
       echo "Invalid source: $SOURCE. Use npm or github." >&2

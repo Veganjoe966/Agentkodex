@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.0.4 - 2026-06-03
+
+### Fixed
+
+- Primary `ask` help no longer exposes judge selection; judge/scoring remains internal backend infrastructure.
+- Ask routing now uses an internal confidence strategy with task-category-specific reputation before deciding whether to run one agent or compare candidates.
+- Category-specific reputation now prevents high global win counts in one task type from overriding better history in another task type.
+
+### Validation
+
+- Regression coverage added for hidden judge UX, internal judge/scoring behavior, `ask --help`, and category-specific strategy selection.
+
+## 1.0.3 - 2026-06-03
+
+### Fixed
+
+- Installer permission handling now detects npm global `EACCES`, retries with a user-local npm prefix, and avoids repeating the same failing global install path.
+- CLI exit-code contracts now fail closed for failed runs, failed gates, failed session finalization, denied tournament contestants, and all-skipped required swarm phases.
+- Adapter detection now separates installed binaries from non-interactive readiness so doctor and quickstart do not recommend detected-but-broken launch paths.
+- Runtime control errors now return safe, actionable customer messages instead of raw socket paths.
+- Release gate now validates Agentkodex package/docs consistency and rejects non-package roots with a clear project-gate hint.
+
+### Validation
+
+- Customer readiness class tests added for install, package drift, exit-code truth, adapter readiness, lifecycle status, and safe errors.
+
 ## 1.0.2 - 2026-06-03
 
 ### Added

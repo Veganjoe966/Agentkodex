@@ -27,7 +27,7 @@ test('cli help and version boot without missing imports', () => {
 
   const version = run(['version']);
   assert.equal(version.status, 0, version.stderr);
-  assert.match(version.stdout.trim(), /^1\.0\.2$/);
+  assert.equal(version.stdout.trim(), require('../package.json').version);
 });
 
 test('cli cockpit snapshot works without starting a long-lived server', () => {

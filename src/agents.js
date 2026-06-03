@@ -36,16 +36,17 @@ function getAgent(config, agentId) {
 
 async function detectAgent(config, agentId) {
   const agent = getAgent(config, agentId);
-  if (agent.id === 'local') return { ...agent, installed: true, binary: null, reason: 'built-in' };
+  if (agent.disabled) return withTrust(await withReadiness({ ...agent, installed: false, binary: null, reason: 'Agent is disabled by config.', readinessState: 'disabled' }));
+  if (agent.id === 'local') return withTrust(await withReadiness({ ...agent, installed: true, binary: null, reason: 'built-in' }));
 
   const commandTemplate = resolveTemplateFromEnv(agent.id, agent.commandTemplate);
   if (agent.id === 'shell') {
     const shellCommand = commandTemplate || process.env.SHELL || (process.platform === 'win32' ? 'cmd.exe' : 'sh');
     const token = firstCommandToken(shellCommand);
-    return { ...agent, commandTemplate: shellCommand, installed: true, binary: token, reason: 'system shell' };
+    return withTrust(await withReadiness({ ...agent, commandTemplate: shellCommand, installed: true, binary: token, reason: 'system shell' }));
   }
 
-  if (!commandTemplate) return { ...agent, commandTemplate, installed: false, binary: null, reason: 'No command template configured.' };
+  if (!commandTemplate) return withTrust(await withReadiness({ ...agent, commandTemplate, installed: false, binary: null, reason: 'No command template configured.' }));
   if (agent.id === 'copilot') return detectCopilot(agent, commandTemplate);
 
   const candidates = agent.binaries && agent.binaries.length ? agent.binaries : [firstCommandToken(commandTemplate)];
@@ -54,16 +55,16 @@ async function detectAgent(config, agentId) {
       const resolvedTemplate = candidate === firstCommandToken(commandTemplate)
         ? commandTemplate
         : commandTemplate.replace(firstCommandToken(commandTemplate), candidate);
-      return withTrust({ ...agent, commandTemplate: resolvedTemplate, installed: true, binary: candidate, reason: 'installed' });
+      return withTrust(await withReadiness({ ...agent, commandTemplate: resolvedTemplate, installed: true, binary: candidate, reason: 'installed' }));
     }
   }
-  return withTrust({ ...agent, commandTemplate, installed: false, binary: candidates[0] || null, reason: `Binary not found: ${candidates.join(' or ')}` });
+  return withTrust(await withReadiness({ ...agent, commandTemplate, installed: false, binary: candidates[0] || null, reason: `Binary not found: ${candidates.join(' or ')}` }));
 }
 
 async function detectCopilot(agent, commandTemplate) {
-  if (!(await commandExists('gh'))) return { ...agent, commandTemplate, installed: false, binary: 'gh', reason: 'Binary not found: gh' };
+  if (!(await commandExists('gh'))) return withTrust(await withReadiness({ ...agent, commandTemplate, installed: false, binary: 'gh', reason: 'Binary not found: gh' }));
   const hasCopilot = await commandSucceeds('gh copilot --help');
-  return withTrust({ ...agent, commandTemplate, installed: hasCopilot, binary: 'gh', reason: hasCopilot ? 'installed' : 'GitHub CLI found, but gh copilot is unavailable or not authenticated.' });
+  return withTrust(await withReadiness({ ...agent, commandTemplate, installed: true, binary: 'gh', reason: hasCopilot ? 'installed' : 'GitHub CLI found, but gh copilot is unavailable or not authenticated.', readinessState: hasCopilot ? undefined : 'installed_not_authenticated' }));
 }
 
 function commandSucceeds(command) {
@@ -104,6 +105,44 @@ function buildAgentCommand(agent, context) {
     task: shellQuote(context.task),
   };
   return template.replace(/\{(promptFile|prompt|cwd|runDir|task)\}/g, (_, key) => replacements[key]);
+}
+
+async function withReadiness(agent) {
+  const readiness = await assessReadiness(agent);
+  return {
+    ...agent,
+    configured: readiness.configured,
+    runnable: readiness.runnable,
+    ready: readiness.state === 'ready',
+    readinessState: readiness.state,
+    readiness,
+  };
+}
+
+async function assessReadiness(agent) {
+  const configured = Boolean(agent.commandTemplate) || ['local', 'shell'].includes(agent.id) || Boolean(agent.explicit);
+  if (agent.readinessState === 'disabled') return readiness('disabled', configured, false, agent.reason || 'Agent disabled by config.', 'Enable the adapter in .agentkodex/config.json to use it.');
+  if (!agent.installed) return readiness('missing', configured, false, agent.reason || 'Agent binary or command template is missing.', agent.reason || 'Install the CLI or configure a command template.');
+  if (!configured) return readiness('configured', false, false, 'No command template configured.', `Run: agentkodex agents set ${agent.id || 'custom'} --cmd "your-cli {promptFile}"`);
+  if (agent.readinessState === 'installed_not_authenticated') return readiness(agent.readinessState, configured, false, agent.reason, 'Authenticate or enable the provider CLI, then run agentkodex doctor again.');
+  if (requiresNonInteractiveTemplate(agent)) {
+    return readiness('installed_not_noninteractive_ready', configured, false, 'Binary exists, but the configured launch does not include a prompt/task argument.', `Configure a non-interactive template, for example: agentkodex agents set ${agent.id} --cmd "${agent.binary || agent.id} {promptFile}"`);
+  }
+  if (agent.smokeCommand && !(await commandSucceeds(agent.smokeCommand))) {
+    return readiness('failed_smoke', configured, false, `Smoke command failed: ${agent.smokeCommand}`, 'Fix CLI authentication/configuration or command flags before using this adapter.');
+  }
+  return readiness('ready', configured, true, agent.reason || 'ready', 'Ready for Agentkodex launch.');
+}
+
+function readiness(state, configured, runnable, message, hint) {
+  return { state, configured: Boolean(configured), runnable: Boolean(runnable), message, hint };
+}
+
+function requiresNonInteractiveTemplate(agent) {
+  if (!agent.commandTemplate || !agent.installed) return false;
+  if (agent.id === 'custom') return false;
+  if (!['interactive-cli', 'terminal-pair-programmer'].includes(agent.kind)) return false;
+  return !/\{(?:promptFile|prompt|task)\}/.test(String(agent.commandTemplate));
 }
 
 function withTrust(agent) {
@@ -187,5 +226,6 @@ module.exports = {
   setAgentCommand,
   recommendAgents,
   renderAgentTable,
+  withReadiness,
   withTrust,
 };

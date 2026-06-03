@@ -56,7 +56,7 @@ async function buildRuntimeSessionStart(options) {
     } else {
       const detection = await detectAgent(config, agentId);
       writeJson(path.join(run.dir, 'agent-detection.json'), detection);
-      if (!detection.installed) throw new Error(detection.reason || `Agent ${agentId} is not installed.`);
+      if (!detection.ready) throw new Error(detection.readiness?.hint || detection.reason || `Agent ${agentId} is not ready.`);
       command = buildAgentCommand(detection, { promptFile, promptText: missionPrompt, cwd: root, runDir: run.dir, task });
       stdin = detection.stdin ? missionPrompt : null;
       adapterKind = detection.kind || 'template';

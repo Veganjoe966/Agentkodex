@@ -1,7 +1,7 @@
 {
   "name": "agentkodex",
-  "version": "1.0.2",
-  "description": "The control plane for AI coding agents.",
+  "version": "1.0.4",
+  "description": "The chat-first control plane for AI coding agents.",
   "license": "MIT",
   "type": "commonjs",
   "repository": {
