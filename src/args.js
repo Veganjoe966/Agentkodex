@@ -17,6 +17,7 @@ const BOOLEAN_FLAGS = new Set([
   'list',
   'max',
   'new',
+  'noAnimation',
   'authEnabled',
   'authRequired',
   'noInitialPrompt',

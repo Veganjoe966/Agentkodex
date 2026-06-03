@@ -23,7 +23,10 @@ test('cli help and version boot without missing imports', () => {
   const help = run(['--help']);
   assert.equal(help.status, 0, help.stderr);
   assert.match(help.stdout, /Agentkodex/);
-  assert.match(help.stdout, /Runtime v2/);
+  assert.match(help.stdout, /agentkodex setup/);
+  assert.match(help.stdout, /agentkodex ask "Explain this project"/);
+  assert.match(help.stdout, /agentkodex chat/);
+  assert.doesNotMatch(help.stdout, /Runtime v2|tournament|scorecards|audit bundles|routing|swarms/i);
 
   const version = run(['version']);
   assert.equal(version.status, 0, version.stderr);

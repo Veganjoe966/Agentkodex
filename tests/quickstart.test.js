@@ -17,6 +17,11 @@ test('quickstart writes friendly project setup summary', async () => {
   assert.equal(result.projectName, 'friendly');
   assert.ok(fs.existsSync(result.quickstartPath));
   const text = fs.readFileSync(result.quickstartPath, 'utf8');
-  assert.match(text, /Next Commands/);
-  assert.match(text, /agentkodex gates run/);
+  assert.match(text, /Welcome to Agentkodex/);
+  assert.match(text, /Agentkodex can help you/);
+  assert.match(text, /Explain this project/);
+  assert.match(text, /agentkodex ask "Explain this project"/);
+  assert.match(text, /agentkodex chat/);
+  const primary = text.split('Advanced Information')[0];
+  assert.doesNotMatch(primary, /gates|routing|scorecards|sessions|tournaments|cockpit|audit|capabilities/i);
 });

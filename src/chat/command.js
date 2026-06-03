@@ -105,8 +105,8 @@ function startupText(id) {
     '',
     `Conversation: ${id}`,
     '',
-    'Type a request. Agentkodex will compare ready agents and return the best result.',
-    'Examples: Explain this project | Find bugs | Fix failing tests | Review security risks',
+    'Type what you want help with.',
+    'Examples: Explain this project | Find bugs | Review architecture | Fix failing tests',
   ].join('\n');
 }
 

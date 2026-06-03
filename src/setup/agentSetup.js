@@ -3,6 +3,7 @@
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { parseArgs, booleanFlag, stringFlag } = require('../args');
+const { GOALS, ONBOARDING_STEPS, renderTryCommand, withOnboardingProgress } = require('../onboarding/flow');
 const { ensureKodex, loadConfig, saveConfig } = require('../kodexStore');
 const { commandExists, firstCommandToken } = require('../sessionRunner');
 const { writeAuditEvidence } = require('../audit/evidence');
@@ -43,7 +44,11 @@ const ADAPTERS = [
 async function setupCommand(argv) {
   const { flags } = parseArgs(argv);
   const root = path.resolve(stringFlag(flags, 'cwd', stringFlag(flags, 'repo', process.cwd())));
-  const result = await runSetup(root);
+  const json = booleanFlag(flags, 'json');
+  const result = await withOnboardingProgress(ONBOARDING_STEPS, () => runSetup(root), {
+    json,
+    skip: booleanFlag(flags, 'noAnimation') || booleanFlag(flags, 'no-animation'),
+  });
   if (booleanFlag(flags, 'json')) console.log(JSON.stringify(result, null, 2));
   else console.log(renderSetup(result));
 }
@@ -150,19 +155,44 @@ function safeSummary(result) {
 }
 
 function renderSetup(result) {
-  const lines = ['Agentkodex setup', '', 'Checking coding agents...', ''];
-  for (const agent of result.agents) {
-    const mark = agent.ready ? '✓' : '○';
-    lines.push(`${mark} ${agent.label.padEnd(14)} ${agent.readinessState}${agent.reason ? ` - ${agent.reason}` : ''}`);
-  }
-  lines.push('');
-  lines.push('Ready agents added:');
-  if (result.readyAgents.length) for (const id of result.readyAgents) lines.push(`* ${id}`);
-  else lines.push('* none yet');
-  lines.push('');
-  lines.push('Next:');
+  const ready = result.agents.filter((agent) => agent.ready);
+  const notReady = result.agents.filter((agent) => !agent.ready);
+  const lines = ['Welcome to Agentkodex.', '', 'Ready to use:'];
+  if (ready.length) for (const agent of ready) lines.push(`✓ ${agent.label}`);
+  else lines.push('○ No coding agents are ready yet');
+  lines.push('', 'Not ready:');
+  if (notReady.length) for (const agent of notReady) lines.push(`○ ${agent.label}${statusHint(agent)}`);
+  else lines.push('✓ All detected agents are ready');
+  lines.push('', ready.length ? 'You can start now:' : 'Before you start:');
   lines.push(result.next);
+  lines.push('', 'Agentkodex can help you:');
+  GOALS.forEach((goal, index) => lines.push(`${index + 1}. ${goal}`));
+  lines.push('', 'Try:', renderTryCommand(), '', 'Advanced Information:', 'Use:', 'agentkodex doctor --verify-agents', 'agentkodex help all');
   return lines.join('\n');
+}
+
+function statusHint(agent) {
+  const status = friendlyStatus(agent);
+  return status ? `: ${status}` : '';
+}
+
+function friendlyStatus(agent) {
+  switch (agent.readinessState) {
+    case 'missing':
+      return 'missing';
+    case 'installed_not_authenticated':
+      return 'not authenticated';
+    case 'installed_not_noninteractive_ready':
+      return 'not ready for non-interactive use';
+    case 'disabled':
+      return 'disabled';
+    case 'degraded':
+      return 'needs a fresh setup check';
+    case 'smoke_failed':
+      return 'check failed';
+    default:
+      return agent.reason || '';
+  }
 }
 
 module.exports = {

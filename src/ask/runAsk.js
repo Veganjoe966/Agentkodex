@@ -184,18 +184,29 @@ function failedResult(input) {
 }
 
 function renderAsk(result) {
-  const lines = [result.scores.length === 1 ? `Agentkodex used ${result.winner || 'one agent'}.` : `Agentkodex compared ${result.scores.length} agents.`, ''];
-  lines.push(`Winner: ${result.winner || 'none'}`);
-  if (result.selection?.reason) lines.push(`Reason: ${result.selection.reason}`);
-  lines.push('');
-  lines.push('Scores:');
-  for (const item of result.scores) lines.push(`* ${item.agent}: ${item.score}`);
+  const lines = [];
+  if (!result.ok) {
+    lines.push('Agentkodex could not complete the request.', '');
+  } else if (result.scores.length > 1) {
+    lines.push(`Agentkodex compared ${result.scores.length} agents.`, '', `Winner: ${result.winner}`, '');
+  } else {
+    lines.push(`Agentkodex used ${result.winner || 'one agent'}.`, '');
+  }
+  lines.push('Reason:');
+  lines.push(humanAskReason(result));
   lines.push('');
   lines.push('Result:');
   lines.push(result.response || result.blockedReason || '(no response)');
   lines.push('');
-  lines.push(`Artifacts: ${result.artifactsPath || '(none)'}`);
+  if (result.artifactsPath) lines.push(`Evidence: ${result.artifactsPath}`);
   return lines.join('\n');
+}
+
+function humanAskReason(result) {
+  if (!result.ok) return result.blockedReason || 'No ready agent produced a usable result.';
+  if (result.servedFromCache) return 'Same request and project state were already answered safely.';
+  if (result.scores.length > 1) return 'Produced the strongest solution.';
+  return 'Best match for this task.';
 }
 
 function cloneConfig(config) {

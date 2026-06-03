@@ -1,31 +1,13 @@
 'use strict';
 
+const { primaryOnboardingText } = require('./onboarding/flow');
+
 function helpText(scope = 'short') {
   return scope === 'all' ? fullHelp() : shortHelp();
 }
 
 function shortHelp() {
-  return `Agentkodex — The chat-first control plane for AI coding agents.
-
-Start here:
-  agentkodex setup
-  agentkodex agents
-  agentkodex ask "Explain this project"
-  agentkodex chat
-  agentkodex doctor --verify-agents
-
-Common commands:
-  agentkodex setup [--json]
-  agentkodex agents [--json]
-  agentkodex ask [--mode answer|review|patch|auto] "request"
-  agentkodex chat [--new|--resume last|--list]
-  agentkodex doctor [--verify-agents]
-
-Advanced:
-  agentkodex help all
-
-Backend infrastructure: Runtime v2, gates, audit bundles, scorecards, routing, swarms, and tournaments.
-`;
+  return `${primaryOnboardingText()}\n`;
 }
 
 function fullHelp() {

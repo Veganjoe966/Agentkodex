@@ -23,7 +23,21 @@
   <code>agentkodex chat</code>
 </p>
 
-## Start Here
+## What can Agentkodex do for me?
+
+Agentkodex helps you use the coding agents you already have on this machine.
+
+Ask it to:
+
+1. Explain this project
+2. Find likely bugs
+3. Review architecture
+4. Fix failing tests
+5. Answer your own project question
+
+You ask once. Agentkodex picks the best available path, keeps unsafe changes out of your working tree by default, and saves evidence you can inspect later.
+
+## Quick Start
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Veganjoe966/Agentkodex/main/install.sh | sh
@@ -38,7 +52,7 @@ npm install -g agentkodex
 agentkodex setup
 ```
 
-Agentkodex sits above coding CLIs such as Codex CLI, Claude Code, Aider, Gemini CLI, OpenCode, Cursor CLI, Copilot CLI, shell agents, and custom command agents. It does not pretend to be the model. It gives your agents a controlled runtime, quality gates, policy checks, replayable evidence, and a simple chat-first interface.
+Agentkodex detects coding CLIs such as Codex CLI, Claude Code, Aider, Gemini CLI, OpenCode, Cursor CLI, Copilot CLI, shell agents, and custom command agents. It never reads or stores their credentials.
 
 ## What It Feels Like
 
@@ -46,7 +60,9 @@ Agentkodex sits above coding CLIs such as Codex CLI, Claude Code, Aider, Gemini 
 $ agentkodex ask "Fix failing tests"
 
 Agentkodex used Codex CLI.
-Reason: best history for validation work in this repo.
+
+Reason:
+Best match for this task.
 
 Result:
 ...
@@ -63,20 +79,23 @@ $ agentkodex ask "Review this auth refactor"
 Agentkodex compared 2 agents.
 
 Winner: Claude Code
-Reason: passed gates and produced the clearer review.
+
+Reason:
+Produced the strongest solution.
 ```
 
-The primary product stays simple: ask a question, get the best response. Strategy, routing, scoring, isolated workspaces, gates, and audit bundles stay behind the scenes unless you ask for advanced controls.
+The primary product stays simple: ask a question, get the best response. Advanced controls stay available when you need them.
 
-## Why Agentkodex
+## Why Use It
 
 | Need | What Agentkodex does |
 | --- | --- |
 | Use the coding agents you already installed | Detects ready CLIs and preserves manual adapter config. |
-| Avoid running every agent every time | Uses task reputation and confidence to route quickly when history is strong. |
-| Compare when it matters | Runs multiple candidates for uncertain, risky, or explicitly compared tasks. |
+| Get value immediately | Starts with setup, ask, and chat instead of teaching internals first. |
+| Avoid running every agent every time | Learns which agent works best for each kind of task. |
+| Compare when it matters | Runs multiple candidates for uncertain or risky work. |
 | Keep patches safe | Runs patch candidates in isolated workspaces and applies only the winner when requested. |
-| Trust the result | Saves artifacts, scorecards, audit evidence, and replayable run data. |
+| Inspect later | Saves local evidence and artifacts for review. |
 
 ## Primary Workflow
 

@@ -8,6 +8,7 @@ const { detectAgent } = require('../agents');
 const { rebuildIntelligence } = require('../intelligence/store');
 const { routeTask } = require('../router/route');
 const { writeText } = require('../utils');
+const { GOALS, ONBOARDING_STEPS, renderTryCommand, withOnboardingProgress } = require('./flow');
 
 function cwdFromFlags(flags) {
   return path.resolve(stringFlag(flags, 'repo', stringFlag(flags, 'cwd', process.cwd())));
@@ -17,8 +18,12 @@ async function quickstartCommand(argv) {
   const { flags, positionals } = parseArgs(argv);
   const root = cwdFromFlags(flags);
   const task = positionals.join(' ').trim() || stringFlag(flags, 'task', 'Verify this project');
-  const result = await buildQuickstart(root, task);
-  if (booleanFlag(flags, 'json')) console.log(JSON.stringify(result, null, 2));
+  const json = booleanFlag(flags, 'json');
+  const result = await withOnboardingProgress(ONBOARDING_STEPS, () => buildQuickstart(root, task), {
+    json,
+    skip: booleanFlag(flags, 'noAnimation') || booleanFlag(flags, 'no-animation'),
+  });
+  if (json) console.log(JSON.stringify(result, null, 2));
   else console.log(renderQuickstart(result));
 }
 
@@ -45,7 +50,7 @@ async function buildQuickstart(root, task) {
     route,
     intelligenceDir: kodexPath(root, 'intelligence'),
     quickstartPath: kodexPath(root, 'QUICKSTART.md'),
-    nextSteps: nextSteps(gates, route, agents),
+    nextSteps: nextSteps(),
     intelligenceReady: Boolean(intelligence.project),
   };
   writeText(result.quickstartPath, renderQuickstart(result));
@@ -62,47 +67,47 @@ async function detectConfiguredAgents(config) {
   return rows;
 }
 
-function nextSteps(gates, route, agents = []) {
-  const runnable = gates.filter((gate) => !gate.skipped).map((gate) => gate.gate);
-  const gateList = runnable.length ? runnable.join(',') : 'test';
-  const agent = sessionAgent(route, agents);
+function nextSteps() {
   return [
-    `agentkodex gates run --gates ${gateList}`,
-    `agentkodex session start --agent ${agent} "Describe the task here"`,
-    'agentkodex cockpit',
-    'agentkodex audit-bundle last',
+    'agentkodex ask "Explain this project"',
+    'agentkodex ask "Find bugs"',
+    'agentkodex ask "Review architecture"',
+    'agentkodex ask "Fix failing tests"',
+    'agentkodex chat',
   ];
 }
 
-function sessionAgent(route, agents) {
-  const ready = new Set(agents.filter((agent) => agent.ready).map((agent) => agent.id));
-  if (route.selected && route.selected !== 'local' && ready.has(route.selected)) return route.selected;
-  const preferred = ['codex', 'claude-code', 'aider', 'gemini', 'opencode', 'cursor', 'custom'];
-  return preferred.find((id) => ready.has(id)) || 'shell';
-}
-
 function renderQuickstart(result) {
-  const lines = ['# Agentkodex Quickstart', ''];
+  const lines = ['Welcome to Agentkodex.', ''];
+  lines.push(`I found ${article(projectKind(result))} ${projectKind(result)} project.`);
+  lines.push('', 'Ready agents:');
+  const ready = result.agents.filter((agent) => agent.ready);
+  if (ready.length) for (const agent of ready) lines.push(`✓ ${agent.id}`);
+  else lines.push('○ No ready coding agents yet');
+  lines.push('', 'Agentkodex can help you:');
+  GOALS.forEach((goal, index) => lines.push(`${index + 1}. ${goal}`));
+  lines.push('', 'Try:', renderTryCommand(), '', 'Or start a conversation:', 'agentkodex chat');
+  lines.push('', 'Advanced Information', '');
   lines.push(`Project: ${result.projectName}`);
   lines.push(`Root: ${result.root}`);
   lines.push(`Languages: ${result.languages.join(', ') || 'unknown'}`);
   lines.push(`Frameworks: ${result.frameworks.join(', ') || 'unknown'}`);
   lines.push(`Package manager: ${result.packageManager}`);
   lines.push('');
-  lines.push('## What Agentkodex Found');
+  lines.push('Discovered commands:');
   if (!result.commands.length) lines.push('- No project commands discovered yet.');
   for (const cmd of result.commands) lines.push(`- ${cmd.name}: \`${cmd.command}\` (${cmd.confidence}; ${cmd.evidence})`);
   lines.push('');
-  lines.push('## Suggested Gates');
+  lines.push('Suggested validation:');
   for (const gate of result.gates) {
     if (gate.skipped) lines.push(`- ${gate.gate}: skipped (${gate.reason})`);
     else lines.push(`- ${gate.gate}: \`${gate.command}\``);
   }
   lines.push('');
-  lines.push('## Agent Availability');
+  lines.push('Agent readiness details:');
   for (const agent of result.agents) lines.push(`- ${agent.id}: ${agent.ready ? 'ready' : agent.installed ? agent.readinessState || 'degraded' : 'missing'}${agent.binary ? ` (${agent.binary})` : ''} - ${agent.reason || ''}`);
   lines.push('');
-  lines.push('## Router');
+  lines.push('Routing details:');
   if (result.route.selected) {
     lines.push(`Recommended agent: ${result.route.selected}`);
     lines.push(`Reason: ${result.route.reason}`);
@@ -111,12 +116,27 @@ function renderQuickstart(result) {
     lines.push('Run tasks or tournaments first to build scorecards.');
   }
   lines.push('');
-  lines.push('## Next Commands');
+  lines.push('Useful commands:');
   for (const step of result.nextSteps) lines.push(`- \`${step}\``);
+  lines.push('- `agentkodex doctor`');
+  lines.push('- `agentkodex help all`');
   lines.push('');
   lines.push(`Saved: ${result.quickstartPath}`);
   lines.push('');
   return lines.join('\n');
+}
+
+function projectKind(result) {
+  const languages = new Set((result.languages || []).map((item) => String(item).toLowerCase()));
+  const frameworks = new Set((result.frameworks || []).map((item) => String(item).toLowerCase()));
+  if (languages.has('javascript') || languages.has('typescript') || result.packageManager !== 'unknown') return 'JavaScript';
+  if (languages.has('python')) return 'Python';
+  if (frameworks.size) return [...frameworks][0];
+  return 'software';
+}
+
+function article(word) {
+  return /^[aeiou]/i.test(word) ? 'an' : 'a';
 }
 
 module.exports = {
