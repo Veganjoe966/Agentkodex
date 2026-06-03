@@ -15,6 +15,7 @@ Usage:
   agentkodex gates run --gates lint,test,build
   agentkodex quality check [--json] [--max-file-lines 400]
   agentkodex governance summary [last|run-id|root] [--json]
+  agentkodex keys status|list|rotate|retire [--json]
   agentkodex lintguard check [--local|--url http://127.0.0.1:8001] [--json]
   agentkodex run --runtime cockpit [options] "task"
   agentkodex swarm --builder shell --reviewer shell --qa shell "task"
@@ -44,6 +45,8 @@ Run options:
   --cockpit             alias for --runtime cockpit
   --skip-agent          skip implementation phase and run only discovery/gates/reports
   --yes                 approve reviewed risky commands; blocked commands still fail
+  --max-complexity      quality gate complexity threshold, default 60
+  --unused-imports      quality gate dead-import mode: warn or fail
   --pty                 wrap command with script(1) pseudo-terminal when available
   --wait                with session start, wait for exit and auto-finalize
   --no-finalize         with session start --wait, skip automatic gate finalization

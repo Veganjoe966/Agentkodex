@@ -24,6 +24,7 @@ const { findAgentguardSource } = require('./agentguard/bridge');
 const { lintguardCommand } = require('./lintguard/command');
 const { qualityCommand } = require('./gates/qualityCommand');
 const { governanceCommand } = require('./governance/command');
+const { keysCommand } = require('./keys/command');
 
 async function main(argv) {
   const [command = 'help', ...rest] = argv;
@@ -43,6 +44,8 @@ async function main(argv) {
       return lintguardCommand(rest);
     case 'quality':
       return qualityCommand(rest);
+    case 'keys':
+      return keysCommand(rest);
     case 'governance':
       return governanceCommand(rest);
     case 'audit-bundle':

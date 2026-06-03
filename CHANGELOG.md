@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.1 - 2026-06-03
+
+### Added
+
+- User-facing Ed25519 key CLI: `agentkodex keys status|list|rotate|retire`.
+- Key lifecycle audit events: `ed25519_key_created`, `ed25519_key_rotated`, `ed25519_key_retired`, `ed25519_key_status_checked`, and `ed25519_key_rotation_failed`.
+- Advanced quality checks for complexity, simple circular dependencies, conservative dead imports, dependency hygiene, and architecture boundaries.
+- Focused tests for key CLI, key retirement, corrupt key stores, and advanced quality gate failures.
+
+### Validation
+
+- `npm test`: 75/75 passing.
+- `npm run lint`: passing.
+- `npm run typecheck`: passing.
+- `npm run quality:gate`: passing.
+
 ## 1.0.0 - 2026-06-03
 
 ### Added

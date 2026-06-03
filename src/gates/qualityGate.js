@@ -8,6 +8,7 @@ const { ensureDir, writeJson } = require('../utils');
 const { scopedFiles, isEnvFile } = require('./fileScope');
 const { issueQualityCapability } = require('../capabilities/phases');
 const { writeAuditEvidence } = require('../audit/evidence');
+const { runAdvancedChecks } = require('./advancedChecks');
 
 const DEFAULT_MAX_LINES = 400;
 const FORBIDDEN_IMPORTS = [
@@ -29,6 +30,7 @@ async function runQualityGate(options = {}) {
   }
   checks.push(runLocCheck(root, files, Number(options.maxFileLines || DEFAULT_MAX_LINES)));
   checks.push(runArchitectureCheck(root, files, options.forbiddenImports || FORBIDDEN_IMPORTS));
+  checks.push(...runAdvancedChecks(root, files, options));
 
   const failed = checks.find((check) => !check.ok);
   const result = {

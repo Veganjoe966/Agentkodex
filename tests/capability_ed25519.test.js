@@ -7,7 +7,7 @@ const path = require('path');
 const os = require('os');
 const { issueCapability, legacySign } = require('../src/capabilities/issuer');
 const { verifyCapability } = require('../src/capabilities/verify');
-const { rotateCapabilityKey } = require('../src/capabilities/keys');
+const { retireCapabilityKey, rotateCapabilityKey } = require('../src/capabilities/keys');
 
 test('ed25519 capability signature is accepted', () => {
   const dir = tempRoot();
@@ -50,7 +50,18 @@ test('rotated ed25519 verification keys keep old capabilities valid', () => {
   const second = issueCapability(dir, scoped(dir, { sessionId: 'session-two' }));
   assert.equal(verifyCapability(dir, first, expected(dir)).allowed, true);
   assert.equal(verifyCapability(dir, second, expected(dir, { sessionId: 'session-two' })).allowed, true);
-  assert.match(evidence(dir), /capability_key_rotation/);
+  assert.match(evidence(dir), /ed25519_key_rotated/);
+});
+
+test('retired ed25519 key no longer verifies existing capability', () => {
+  const dir = tempRoot();
+  const first = issueCapability(dir, scoped(dir));
+  const oldKeyId = first.keyId;
+  rotateCapabilityKey(dir, { reason: 'test' });
+  assert.equal(verifyCapability(dir, first, expected(dir)).allowed, true);
+  retireCapabilityKey(dir, oldKeyId);
+  assert.equal(verifyCapability(dir, first, expected(dir)).allowed, false);
+  assert.match(evidence(dir), /ed25519_key_retired/);
 });
 
 test('legacy hmac capability works in compatibility mode and logs warning', () => {

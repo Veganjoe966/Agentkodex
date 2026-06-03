@@ -1,12 +1,12 @@
-# Agentkodex v1.0.0 Validation Report
+# Agentkodex v1.0.1 Validation Report
 
 Validated on: 2026-06-03  
 Runtime used for validation: Node.js v20.18.1  
-Package: `agentkodex@1.0.0`
+Package: `agentkodex@1.0.1`
 
 ## Summary
 
-Local validation passed for the production CLI harness, Runtime v2 sessions, scoped Agentguard capabilities, Ed25519 capability migration, governance summaries, audit bundle evidence, Agentkodex quality gate, Lintguard adapter gate, intelligence layer, routing, scorecards, tournaments, swarm execution, policy, discovery, gates, installer animation, and Cockpit snapshot mode.
+Local validation passed for the production CLI harness, Runtime v2 sessions, scoped Agentguard capabilities, Ed25519 key CLI, Ed25519 capability migration, governance summaries, audit bundle evidence, Agentkodex quality gate, Lintguard advanced checks, Lintguard adapter gate, intelligence layer, routing, scorecards, tournaments, swarm execution, policy, discovery, gates, installer animation, and Cockpit snapshot mode.
 
 ## Commands Run
 
@@ -29,9 +29,9 @@ npm test
 Result:
 
 ```text
-1..64
-# tests 64
-# pass 64
+1..75
+# tests 75
+# pass 75
 # fail 0
 ```
 
@@ -46,6 +46,19 @@ Capability enforcement coverage:
 - New capabilities are signed with Ed25519 and include `algorithm` and `keyId`.
 - Legacy HMAC capabilities remain accepted in compatibility mode and write migration-warning evidence.
 - Key rotation keeps previous verification keys active.
+- Key CLI supports `status`, `list --json`, `rotate --json`, and `retire`.
+- Retired Ed25519 keys no longer verify existing capabilities.
+- Corrupt key stores fail safely and key rotation failure writes audit evidence.
+
+Key CLI validation:
+
+```bash
+node bin/agentkodex.js keys status
+node bin/agentkodex.js keys list –json
+node bin/agentkodex.js keys rotate –json
+```
+
+Result: all commands passed. JSON output did not include private keys.
 
 Governance visibility:
 
@@ -61,7 +74,7 @@ Agentkodex quality gate:
 npm run quality:gate
 ```
 
-Result: passed. The JSON output reported `ok: true` and successful `eslint`, `typecheck`, `tests`, `loc`, and `architecture` checks. Command output was captured under `.agentkodex/quality-gate/`.
+Result: passed. The JSON output reported `ok: true` and successful `eslint`, `typecheck`, `tests`, `loc`, `architecture`, `complexity`, `circular-deps`, `dead-imports`, `dependency-hygiene`, and `architecture-boundaries` checks. Command output was captured under `.agentkodex/quality-gate/`.
 
 Package dry run:
 
@@ -74,11 +87,11 @@ Result: passed. The package includes `install.sh` with executable mode and exclu
 NPM publish:
 
 ```bash
-npm view agentkodex@1.0.0 version --json
+npm view agentkodex@1.0.1 version --json
 npm publish --access public
 ```
 
-Result: published `agentkodex@1.0.0` to the npm registry and verified the registry reports version `1.0.0`. Publishing used a temporary npm user config that was removed immediately after the command.
+Result: published `agentkodex@1.0.1` to the npm registry and verified the registry reports `latest` as `1.0.1`. Publishing used a temporary npm user config that was removed immediately after the command.
 
 Agentguard bridge smoke:
 
@@ -188,7 +201,9 @@ Result: wrote `.agentkodex/swarms/<id>/manifest.json` and `summary.md`; the buil
 - Agentguard: local JSON bridge, Ed25519 signed capability evidence, approval-required command gating
 - Agentkodex quality gate: CLI/API/CI entrypoints, real lint/type/test failures, LOC budget, forbidden imports, completion blocking, JSON contract
 - Agentguard capabilities: runtime/swarm/tournament/audit/quality phase scopes, direct execution-path checks, Ed25519 signatures, key rotation, legacy HMAC compatibility evidence, failed-validation evidence
+- key CLI: status/list/rotate/retire, no private-key output, corrupt-store safe failure, lifecycle audit events
 - governance: audit manifest fields, summary CLI, scorecard fields, routing penalties/rewards, completion blocking
+- advanced quality checks: complexity, circular dependency, dead imports, dependency hygiene, architecture boundaries
 - Lintguard: sidecar/local JSON gate, token-auth tests, lint/typecheck completion blocking
 - control plane: Cockpit token auth, public-host guard, daemon socket token rejection, socket permissions
 - LOC guard: source files fail tests if they exceed the 400-line hard cap

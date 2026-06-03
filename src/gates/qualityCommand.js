@@ -12,6 +12,7 @@ async function qualityCommand(argv) {
   const [sub = 'check', ...rest] = argv;
   if (sub !== 'check') throw new Error(`Unknown quality subcommand: ${sub}`);
   const { flags, positionals } = parseArgs(rest);
+  const bannedPackages = flags.bannedPackages === undefined ? undefined : listFlag(flags, 'bannedPackages', []);
   const result = await runQualityGate({
     projectRoot: cwdFromFlags(flags),
     changedFiles: [...listFlag(flags, 'files', []), ...positionals],
@@ -19,6 +20,9 @@ async function qualityCommand(argv) {
     yes: booleanFlag(flags, 'yes', true),
     timeoutMs: Number(stringFlag(flags, 'timeoutMs', stringFlag(flags, 'timeout-ms', '600000'))),
     maxFileLines: Number(stringFlag(flags, 'maxFileLines', stringFlag(flags, 'max-file-lines', '400'))),
+    maxComplexity: Number(stringFlag(flags, 'maxComplexity', stringFlag(flags, 'max-complexity', '60'))),
+    unusedImportsMode: stringFlag(flags, 'unusedImports', stringFlag(flags, 'unused-imports', 'warn')),
+    bannedPackages,
   });
   console.log(JSON.stringify(result, null, 2));
   if (!result.ok) process.exitCode = 1;

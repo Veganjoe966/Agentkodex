@@ -1,6 +1,6 @@
 {
   "name": "agentkodex",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "CLI-native agent harness with persistent Runtime v2 sessions and local Cockpit UI.",
   "license": "MIT",
   "type": "commonjs",
