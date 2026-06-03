@@ -18,6 +18,7 @@ const DEFAULT_QUALITY = {
   typecheckCommand: '',
   ruffCommand: '',
   testCommand: '',
+  analysisMode: 'auto',
 };
 
 function loadQualityConfig(root, overrides = {}) {
@@ -52,6 +53,7 @@ function normalizeQualityConfig(config = {}) {
     typecheckCommand: stringValue(config.typecheckCommand),
     ruffCommand: stringValue(config.ruffCommand),
     testCommand: stringValue(config.testCommand),
+    analysisMode: analysisMode(config.analysisMode),
   };
 }
 
@@ -83,6 +85,11 @@ function numberOr(value, fallback) {
 
 function stringValue(value) {
   return value ? String(value) : '';
+}
+
+function analysisMode(value) {
+  const mode = String(value || DEFAULT_QUALITY.analysisMode).toLowerCase();
+  return ['auto', 'heuristic', 'parser'].includes(mode) ? mode : DEFAULT_QUALITY.analysisMode;
 }
 
 function stringList(value) {

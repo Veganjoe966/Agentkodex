@@ -31,6 +31,8 @@ Usage:
   agentkodex audit-bundle [last|run-id] [--run id] [--session id] [--out dir] [--format dir|zip]
   agentkodex audit bundle [last|run-id]
   agentkodex audit verify <bundle-dir> [--json]
+  agentkodex audit anchor <bundle-dir> [--json] [--anchor-path path]
+  agentkodex audit verify-anchor <bundle-dir> [--json] [--anchor-path path]
   agentkodex agents list|detect|set|scorecards
   agentkodex policy check ["command to classify"] [--json]
   agentkodex release gate [--json]
@@ -50,6 +52,7 @@ Run options:
   --yes                 approve reviewed risky commands; blocked commands still fail
   --max-complexity      quality gate complexity threshold, default 60
   --unused-imports      quality gate dead-import mode: warn or fail
+  --analysis-mode       quality analysis mode: auto, heuristic, or parser
   --pty                 wrap command with script(1) pseudo-terminal when available
   --wait                with session start, wait for exit and auto-finalize
   --no-finalize         with session start --wait, skip automatic gate finalization

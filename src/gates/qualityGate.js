@@ -11,6 +11,7 @@ const { writeAuditEvidence } = require('../audit/evidence');
 const { runAdvancedChecks } = require('./advancedChecks');
 const { redactSecrets } = require('../security/redaction');
 const { commandOverrides, forbiddenImportRules, loadQualityConfig } = require('./qualityConfig');
+const { analysisModeCheck, resolveAnalysisMode } = require('./analysisMode');
 const BANNED_ABSOLUTE_PROJECT_PATH = new RegExp(`${escapeRegExp('/app')}/${escapeRegExp('test_project')}\\b`);
 
 async function runQualityGate(options = {}) {
@@ -20,9 +21,11 @@ async function runQualityGate(options = {}) {
   const logDir = options.logDir || path.join(root, '.agentkodex', 'quality-gate');
   ensureDir(logDir);
   const qualityConfig = loadQualityConfig(root, options);
+  const analysis = resolveAnalysisMode(qualityConfig, options);
   const capability = options.capability || issueQualityCapability(root, { sessionId: options.sessionId, runId: options.runId, cwd: root, runDir: options.runDir });
 
   const checks = [];
+  checks.push(analysisModeCheck(analysis));
   for (const spec of commandSpecs(discovery, qualityConfig)) {
     checks.push(await runCommandCheck(root, spec, { ...options, logDir, capability }));
   }
@@ -37,6 +40,7 @@ async function runQualityGate(options = {}) {
   const result = {
     ok: !failed,
     summary: failed ? `Quality gate failed: ${failed.name}` : 'Quality gate passed.',
+    analysisMode: analysis.analysisMode,
     checks,
     filesChecked: files.map((file) => path.relative(root, file)).sort(),
     blockedReason: failed ? failed.details[0] || `${failed.name} failed` : null,
@@ -46,6 +50,7 @@ async function runQualityGate(options = {}) {
     type: 'quality_gate_result',
     ok: result.ok,
     blockedReason: result.blockedReason,
+    analysisMode: result.analysisMode,
     checks: result.checks,
   }, { runDir: options.runDir });
   return result;

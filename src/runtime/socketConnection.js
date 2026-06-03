@@ -12,7 +12,7 @@ function attachSocketHandler(socket, context) {
   socket.on('data', async (chunk) => {
     raw += chunk;
     if (Buffer.byteLength(raw, 'utf8') > MAX_SOCKET_REQUEST_BYTES) {
-      return deny(socket, context, new Error('Daemon request too large.'), { stack: false });
+      return deny(socket, context, new Error('Daemon request too large.'), { stack: false, request: { type: 'oversized' } });
     }
     if (!raw.includes('\n')) return;
     const line = raw.slice(0, raw.indexOf('\n'));
@@ -22,7 +22,7 @@ function attachSocketHandler(socket, context) {
       const response = await context.handleRequest(request);
       socket.write(`${JSON.stringify({ ok: true, response })}\n`);
     } catch (error) {
-      deny(socket, context, error, { stack: true });
+      deny(socket, context, error, { stack: true, request: parseRequest(line) });
     } finally {
       socket.end();
     }
@@ -30,13 +30,17 @@ function attachSocketHandler(socket, context) {
 }
 
 function deny(socket, context, error, options = {}) {
-  context.requestGuard.record(error);
+  context.requestGuard.record(error, options.request || {});
   const reason = sanitizeError(error);
   writeAuditEvidence(context.root, { type: 'daemon_request_denied', allowed: false, reason });
   const logValue = options.stack && error?.stack ? redactSecrets(error.stack) : reason;
   context.log(`request error ${logValue}`);
   socket.write(`${JSON.stringify({ ok: false, error: reason })}\n`);
   socket.end();
+}
+
+function parseRequest(line) {
+  try { return JSON.parse(line); } catch (_) { return { type: 'malformed' }; }
 }
 
 module.exports = {

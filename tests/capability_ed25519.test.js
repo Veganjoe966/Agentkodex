@@ -65,10 +65,18 @@ test('retired ed25519 key no longer verifies existing capability', () => {
   assert.match(evidence(dir), /ed25519_key_retired/);
 });
 
-test('legacy hmac capability works in compatibility mode and logs warning', () => {
+test('legacy hmac capability is denied by default', () => {
   const dir = tempRoot();
   const cap = legacyCapability(dir);
   const result = verifyCapability(dir, cap, expected(dir));
+  assert.equal(result.allowed, false);
+  assert.match(result.reason, /Legacy HMAC/i);
+});
+
+test('legacy hmac capability works only when explicitly enabled and logs warning', () => {
+  const dir = tempRoot();
+  fs.writeFileSync(path.join(dir, 'agentkodex.policy.json'), JSON.stringify({ allowLegacyHmac: true }, null, 2));
+  const result = verifyCapability(dir, legacyCapability(dir), expected(dir));
   assert.equal(result.allowed, true);
   assert.equal(result.warning, 'legacy_hmac_capability');
   assert.match(evidence(dir), /legacy_capability_used/);
@@ -84,7 +92,7 @@ test('revoked capability is denied', () => {
   assert.match(evidence(dir), /capability_revoked/);
 });
 
-test('legacy hmac capability is denied when compatibility is disabled', () => {
+test('legacy hmac capability is denied when compatibility is explicitly disabled', () => {
   const dir = tempRoot();
   fs.writeFileSync(path.join(dir, 'agentkodex.policy.json'), JSON.stringify({ allowLegacyHmac: false }, null, 2));
   const result = verifyCapability(dir, legacyCapability(dir), expected(dir));

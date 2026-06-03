@@ -45,7 +45,7 @@ Checks are not helper-only. They sit directly before process execution in:
 
 Failed capability validation writes audit evidence before returning.
 
-New capabilities are signed natively in Node with Ed25519. Agentkodex stores signing and verification keys under `.agentkodex/runtime/capability-keys.json`, chmods the key store to `0600` where supported, and records key lifecycle evidence. Legacy HMAC capabilities remain accepted during migration and emit `legacy_capability_used` audit evidence.
+New capabilities are signed natively in Node with Ed25519. Agentkodex stores signing and verification keys under `.agentkodex/runtime/capability-keys.json`, chmods the key store to `0600` where supported, and records key lifecycle evidence. Legacy HMAC capabilities are migration-only and denied by default; they work only when `agentkodex.policy.json` explicitly sets `allowLegacyHmac: true`, and every legacy use emits `legacy_capability_used` audit evidence.
 
 ## Key Lifecycle
 
@@ -145,6 +145,7 @@ The result is always machine-readable:
 {
   "ok": true,
   "summary": "Quality gate passed.",
+  "analysisMode": "heuristic",
   "checks": [
     {
       "name": "eslint",
@@ -155,7 +156,12 @@ The result is always machine-readable:
     }
   ],
   "filesChecked": [],
-  "blockedReason": null
+  "blockedReason": null,
+  "totals": {
+    "errors": 0,
+    "warnings": 0,
+    "filesChecked": 0
+  }
 }
 ```
 
@@ -175,6 +181,18 @@ Current checks:
 
 Command checks run real project commands. Non-zero exits fail the gate. LOC and architecture checks run locally and do not need external packages.
 Quality gate results are written to audit evidence and copied into audit bundles when attached to a run.
+
+Analysis mode is configurable:
+
+```json
+{
+  "analysisMode": "auto"
+}
+```
+
+- `auto`: use parser-backed analysis only when an optional supported parser package is available; otherwise use heuristic mode.
+- `heuristic`: always use built-in lightweight static checks.
+- `parser`: require parser-backed analysis and fail clearly when no parser dependency is installed.
 
 Quality gate configuration can be passed through API options or `.agentkodex/config.json` under `qualityGate`:
 
@@ -241,6 +259,28 @@ It returns:
 The gate is deny-by-default for unknown dangerous actions and blocked commands. Command authorization reuses Agentkodex policy plus the Agentguard JSON bridge when Agentguard is available.
 Security decisions, denied actions, capability issuance/validation, legacy capability warnings, key rotations, and failed capability checks are written to `.agentkodex/audit/evidence.jsonl` and run-local `audit-evidence.jsonl` when a run directory is available.
 
+## Audit Anchoring
+
+Audit bundles can be anchored to an optional local hash-chain log:
+
+```bash
+agentkodex audit anchor .agentkodex/audit/<bundle-id> --json
+agentkodex audit verify-anchor .agentkodex/audit/<bundle-id> --json
+```
+
+Anchor entries record:
+
+- bundle hash
+- evidence hash
+- previous anchor hash
+- current anchor hash
+- timestamp
+- Ed25519 key/signature when available
+
+The default anchor log is outside the project root under the user home directory. Use `--anchor-path <path>` or `AGENTKODEX_AUDIT_ANCHOR_PATH` for a user-managed append-only location.
+
+This is tamper-evident, not tamper-proof. It can detect later bundle/evidence changes and removed or reordered anchor entries when the anchor log remains available.
+
 ## Agent Workflow
 
 Agents should call the quality gate before claiming work is complete:
@@ -282,23 +322,27 @@ The integration must not add:
 ## Remaining Risks
 
 - Python Agentguard remains optional. Agentkodex now owns native issuing, signature validation, expiration checks, action/path checks, and audit evidence for capabilities.
+- Local same-user filesystem compromise remains an operating-system trust boundary. Optional audit anchoring makes later evidence changes tamper-evident when the anchor log remains intact; it does not make local files tamper-proof.
 - Complexity, circular dependency, dead import, and dependency-hygiene checks are useful baselines, not full language-server replacements.
+- Parser-backed Lintguard analysis is optional and dependency-light. `auto` falls back to heuristic mode when no supported parser is installed, while `parser` mode fails clearly if the parser is missing.
 - Circular dependency and architecture-boundary checks currently target JS/TS relative imports.
 - Dead-import detection is intentionally conservative and strongest for ordinary ES imports.
-- External agent CLIs can still emit sensitive data; Agentkodex redacts before logs, but upstream tools may also write their own files.
+- External agent CLIs can still emit sensitive data; Agentkodex redacts before Agentkodex logs, but upstream tools may also write their own files.
 
 ## Production Gate Additions
 
 Agentkodex supports root-level config files:
 
-- `agentkodex.quality.json` for Lintguard budgets, command overrides, forbidden imports, banned packages, dependency hygiene, and architecture boundaries.
-- `agentkodex.policy.json` for default-deny behavior, path scopes, action patterns, capability TTL, Ed25519/HMAC compatibility, and broad execution permissions.
+- `agentkodex.quality.json` for Lintguard budgets, analysis mode, command overrides, forbidden imports, banned packages, dependency hygiene, and architecture boundaries.
+- `agentkodex.policy.json` for default-deny behavior, path scopes, action patterns, capability TTL, Ed25519 requirements, HMAC migration opt-in, and broad execution permissions.
 
 Audit bundles are verifiable:
 
 ```bash
 agentkodex audit bundle last
 agentkodex audit verify .agentkodex/audit/<bundle-id> --json
+agentkodex audit anchor .agentkodex/audit/<bundle-id> --json
+agentkodex audit verify-anchor .agentkodex/audit/<bundle-id> --json
 ```
 
 Release validation is one command:
@@ -315,5 +359,5 @@ Next integration step:
 
 1. Move Lintguard architecture rules into a reusable rule pack.
 2. Expand evidence bundle rendering with a human-readable security timeline.
-3. Add deeper parser-backed dependency and dead-code analysis when the dependency tradeoff is justified.
+3. Expand optional parser-backed dependency and dead-code analysis when the dependency tradeoff is justified.
 4. Add policy for scheduled key rotation and operator approval around key retirement.

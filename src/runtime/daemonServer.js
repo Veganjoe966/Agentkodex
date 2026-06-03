@@ -36,7 +36,7 @@ class AgentkodexDaemon {
     this.server = null;
     this.options = options;
     this.token = ensureDaemonToken(this.root);
-    this.requestGuard = createRequestGuard();
+    this.requestGuard = createRequestGuard({ root: this.root });
   }
 
   async start() {
@@ -92,7 +92,7 @@ class AgentkodexDaemon {
   }
 
   async handleRequest(request) {
-    this.requestGuard.assert();
+    this.requestGuard.assert(request);
     this.requestGuard.validate(request);
     assertDaemonToken(this.root, request);
     const type = request.type;

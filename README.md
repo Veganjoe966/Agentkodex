@@ -13,18 +13,49 @@
 <h1 align="center">Agentkodex</h1>
 
 <p align="center">
-  <strong>The CLI-native operations platform for coding agents.</strong><br>
-  Persistent terminals, signed capabilities, quality gates, audit bundles, scorecards, routing, tournaments, and swarm orchestration.
+  <strong>The control plane for AI coding agents.</strong><br>
+  Local-first runtime, governance, audit evidence, quality gates, scorecards, routing, tournaments, and swarm orchestration.
 </p>
 
 Agentkodex is the control plane above coding CLIs such as Codex CLI, Claude Code, Aider, Gemini CLI, OpenCode, Cursor CLI, Copilot CLI, shell agents, and custom command agents.
 
 It does not pretend to be the agent. It gives agents a real terminal runtime and wraps every run with policy, memory, approvals, replay, gates, and evidence.
 
+## 10-Second Explanation
+
+Agentkodex gives coding agents persistent terminals, signed capabilities, quality gates, approvals, replay, audit bundles, scorecards, routing, swarm orchestration, and tournament evaluation.
+
+## What Agentkodex Is / Is Not
+
+Agentkodex is:
+
+- a control plane above coding CLIs
+- a local-first runtime for real terminal sessions
+- a governance layer for capabilities, policy, and approvals
+- an audit/evidence layer for replay, bundles, and verification
+- a quality/security gate layer for completion enforcement
+
+Agentkodex is not:
+
+- not a model
+- not a replacement for Codex, Claude Code, Aider, Gemini, or other coding CLIs
+- not a hosted SaaS by default
+- not bundling external proprietary CLIs
+
+## Architecture
+
+```text
+Coding CLIs
+  -> Agentkodex Runtime v2
+  -> Agentguard signed capabilities
+  -> Lintguard quality gates
+  -> Audit bundles / scorecards / routing
+```
+
 ## Install
 
 ```bash
-npm install -g agentkodex@latest
+npm install -g agentkodex
 agentkodex doctor
 ```
 
@@ -36,15 +67,17 @@ curl -fsSL https://raw.githubusercontent.com/Veganjoe966/Agentkodex/main/install
 
 The installer uses npm first, repairs common PATH issues without `sudo`, and falls back to the GitHub package source only if npm is unavailable.
 
-## First Mission
+## First Run
 
 Run inside any project:
 
 ```bash
 agentkodex quickstart
 agentkodex discover
-agentkodex quality check --json
-agentkodex cockpit
+agentkodex run "Inspect this project and summarize the next safe steps"
+agentkodex quality check
+agentkodex governance summary
+agentkodex audit bundle last
 ```
 
 Start a persistent Runtime v2 session:
@@ -66,9 +99,11 @@ agentkodex audit-bundle last --out ./agentkodex-audit
 agentkodex audit verify ./agentkodex-audit --json
 ```
 
-## Why It Exists
+## Why This Exists
 
-Coding agents live or die by their runtime. A serious agent must touch the real project environment:
+Coding agents move fast, but production work needs persistent sessions, policy enforcement, audit trails, quality gates, completion blocking, and routing based on evidence. Agentkodex provides that control layer without replacing the agent CLI you already use.
+
+A serious agent must touch the real project environment:
 
 | Surface | Agentkodex control |
 | --- | --- |
@@ -92,13 +127,17 @@ Agent execution
   -> completion enforcement
 ```
 
-Agentkodex v1.0.2 passed the local adversarial gauntlet:
+## Verified Status
 
-- `npm test`: 101/101 passed
-- `npm run quality:gate`: passed
-- `npm run release:gate`: passed
-- public npm install: verified
-- audit bundle verification: passed
+Latest local release validation verifies:
+
+- `npm test`: passing
+- `npm run quality:gate`: passing
+- `npm run release:gate`: passing
+- audit bundle verification: passing
+- CLI smoke checks: passing
+
+Agentkodex is local-first and uses tamper-evident audit evidence. It does not claim audit files are tamper-proof against a same-user local filesystem compromise.
 
 Read the report: [docs/ADVERSARIAL_VALIDATION_REPORT.md](docs/ADVERSARIAL_VALIDATION_REPORT.md)
 
@@ -162,6 +201,7 @@ Quality config:
 {
   "maxFileLoc": 400,
   "maxFunctionComplexity": 12,
+  "analysisMode": "auto",
   "failOnCircularDeps": true,
   "failOnMissingDeps": true,
   "bannedPackages": ["posthog", "posthog-js"],
@@ -177,7 +217,7 @@ Policy config:
 {
   "defaultDeny": false,
   "maxCapabilityTtlSeconds": 1800,
-  "allowLegacyHmac": true,
+  "allowLegacyHmac": false,
   "requireEd25519": false,
   "allowShell": true,
   "allowNetwork": true,
@@ -215,6 +255,12 @@ agentkodex cockpit --host 127.0.0.1 --port 3919
 ```
 
 Cockpit is local-only by default and requires a bearer token for API routes. Non-loopback binding is refused unless `--unsafe-public` is explicit.
+
+## Security Note
+
+Agentkodex hardens agent execution with Ed25519 signed capabilities, scoped actions and paths, policy checks, audit evidence, and completion blocking. Legacy HMAC capability validation is migration-only and disabled by default unless explicitly enabled in policy.
+
+Local same-user filesystem compromise remains a local OS trust boundary. Optional audit anchoring makes bundle changes tamper-evident when the anchor log remains available.
 
 ## Documentation
 

@@ -6,7 +6,7 @@
   "pathScopes": [],
   "approvalRequiredActions": [],
   "maxCapabilityTtlSeconds": 1800,
-  "allowLegacyHmac": true,
+  "allowLegacyHmac": false,
   "requireEd25519": false,
   "allowShell": true,
   "allowNetwork": true,

@@ -22,6 +22,7 @@ async function qualityCommand(argv) {
     maxFileLines: Number(stringFlag(flags, 'maxFileLines', stringFlag(flags, 'max-file-lines', '400'))),
     maxComplexity: Number(stringFlag(flags, 'maxComplexity', stringFlag(flags, 'max-complexity', '60'))),
     unusedImportsMode: stringFlag(flags, 'unusedImports', stringFlag(flags, 'unused-imports', 'warn')),
+    analysisMode: stringFlag(flags, 'analysisMode', stringFlag(flags, 'analysis-mode', 'auto')),
     bannedPackages,
   });
   console.log(JSON.stringify(result, null, 2));

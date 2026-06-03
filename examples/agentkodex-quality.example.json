@@ -2,15 +2,16 @@
   "maxFileLoc": 400,
   "maxFunctionComplexity": 60,
   "maxTotalViolations": null,
+  "analysisMode": "auto",
   "forbiddenImports": ["posthog", "@emergentbase"],
   "bannedPackages": ["posthog", "posthog-js", "@emergentbase", "emergent"],
   "architectureBoundaries": {
     "src/runtime": ["src/cockpit"],
     "src/gates": ["src/cockpit"]
   },
-  "failOnDeadImports": false,
+  "failOnDeadImports": true,
   "failOnCircularDeps": true,
-  "failOnMissingDeps": false,
+  "failOnMissingDeps": true,
   "lintCommand": "",
   "typecheckCommand": "",
   "ruffCommand": "",
