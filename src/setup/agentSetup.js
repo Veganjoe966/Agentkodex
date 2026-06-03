@@ -8,6 +8,7 @@ const { ensureKodex, loadConfig, saveConfig } = require('../kodexStore');
 const { commandExists, firstCommandToken } = require('../sessionRunner');
 const { writeAuditEvidence } = require('../audit/evidence');
 const { redactSecrets } = require('../security/redaction');
+const { classifyAdapterRuntimeLimit } = require('../adapters/runtimeLimit');
 
 const READY_STATES = new Set(['ready', 'manually_configured']);
 
@@ -88,6 +89,7 @@ async function runSetup(root, options = {}) {
       writeAuditEvidence(root, { type: 'adapter_auto_configured', allowed: true, agentId: adapter.id, binary: detected.binary });
     } else if (config.agents[adapter.id]?.autoConfigured) {
       config.agents[adapter.id].readinessState = 'degraded';
+      config.agents[adapter.id].readinessReason = detected.reason;
       config.agents[adapter.id].lastDegradedAt = new Date().toISOString();
       writeAuditEvidence(root, { type: 'adapter_degraded', allowed: true, agentId: adapter.id, reason: detected.reason });
     }
@@ -110,6 +112,8 @@ async function probeAdapter(adapter, context = {}) {
   const smoke = runSmoke(adapter.smokeCommand);
   if (smoke.ok) return row(adapter, 'ready', true, binary, 'Ready for Agentkodex.');
   const text = `${smoke.stdout}\n${smoke.stderr}`.toLowerCase();
+  const limit = classifyAdapterRuntimeLimit(adapter.id, text);
+  if (limit) return row(adapter, limit.readinessState, false, binary, limit.message, limit.hint);
   const state = /auth|login|log in|token|credential/.test(text) ? 'installed_not_authenticated' : 'smoke_failed';
   return row(adapter, state, false, binary, smoke.summary || 'Smoke check failed.');
 }
@@ -125,7 +129,7 @@ function runSmoke(command) {
   };
 }
 
-function row(adapter, readinessState, ready, binary, reason) {
+function row(adapter, readinessState, ready, binary, reason, hint = '') {
   return {
     id: adapter.id,
     label: adapter.label,
@@ -134,6 +138,7 @@ function row(adapter, readinessState, ready, binary, reason) {
     installed: readinessState !== 'missing',
     readinessState,
     reason,
+    hint,
   };
 }
 
@@ -187,7 +192,7 @@ function friendlyStatus(agent) {
     case 'disabled':
       return 'disabled';
     case 'degraded':
-      return 'needs a fresh setup check';
+      return agent.reason || 'needs a fresh setup check';
     case 'smoke_failed':
       return 'check failed';
     default:

@@ -102,6 +102,38 @@ test('adapter readiness distinguishes installed from runnable states', async () 
   assert.equal(ready.ready, true);
 });
 
+test('degraded adapter state is not promoted back to ready', async () => {
+  const degraded = await withReadiness({
+    id: 'codex',
+    kind: 'interactive-cli',
+    installed: true,
+    binary: 'codex',
+    commandTemplate: 'codex exec --sandbox workspace-write {prompt}',
+    readinessState: 'degraded',
+    readinessReason: 'Codex CLI is installed, but its internal sandbox cannot run here.',
+  });
+  assert.equal(degraded.ready, false);
+  assert.equal(degraded.readinessState, 'degraded');
+  assert.match(degraded.readiness.message, /internal sandbox cannot run/);
+});
+
+test('setup classifies Codex bubblewrap sandbox failure as degraded', async () => {
+  const { runSetup } = require('../src/setup/agentSetup');
+  const dir = makeProject('ak-codex-bwrap-', {});
+  const result = await runSetup(dir, {
+    adapters: [{
+      id: 'codex',
+      label: 'Codex CLI',
+      commandTemplate: `${process.execPath} --version`,
+      smokeCommand: `${process.execPath} -e "console.error('bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted'); process.exit(1)"`,
+    }],
+  });
+  const codex = result.agents.find((agent) => agent.id === 'codex');
+  assert.equal(codex.ready, false);
+  assert.equal(codex.readinessState, 'degraded');
+  assert.match(codex.reason, /internal sandbox cannot run/);
+});
+
 test('doctor reports degraded readiness instead of plain availability', async () => {
   const dir = makeProject('ak-doctor-ready-', {});
   fs.mkdirSync(path.join(dir, '.agentkodex'), { recursive: true });

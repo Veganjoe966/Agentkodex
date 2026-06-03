@@ -4,7 +4,6 @@ const SUCCESS_STATUSES = new Set([
   'passed',
   'completed',
   'completed_no_gates',
-  'completed_no_gates_discovered',
   'session_completed',
 ]);
 
@@ -14,6 +13,7 @@ function isFailureStatus(status) {
   const value = String(status || '').trim();
   if (!value) return false;
   if (SUCCESS_STATUSES.has(value)) return false;
+  if (value === 'completed_no_gates_discovered') return true;
   return FAILURE_RE.test(value);
 }
 

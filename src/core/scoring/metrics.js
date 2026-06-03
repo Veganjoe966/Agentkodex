@@ -5,7 +5,7 @@ const path = require('path');
 const { readJson, readText, exists } = require('../../utils');
 const { collectRunGovernance, readEvidence } = require('../../governance/summary');
 
-const PASS_STATUSES = new Set(['passed', 'completed_no_gates', 'completed_no_gates_discovered']);
+const PASS_STATUSES = new Set(['passed', 'completed_no_gates']);
 const GATES = ['lint', 'test', 'build', 'e2e', 'quality'];
 
 function collectRunMetrics(input = {}) {

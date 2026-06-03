@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { runSetup } = require('../src/setup/agentSetup');
-const { runAsk } = require('../src/ask/runAsk');
+const { runAsk, renderAsk } = require('../src/ask/runAsk');
 const { loadConfig, saveConfig } = require('../src/kodexStore');
 const { loadReputation, recordAskReputation } = require('../src/ask/reputation');
 const { planAskStrategy } = require('../src/ask/strategy');
@@ -65,6 +65,24 @@ test('ask skips not-ready agents and fails when all candidates fail', async () =
   const result = await runAsk({ root: dir, prompt: 'Explain', mode: 'answer', agents: ['missing'] });
   assert.equal(result.ok, false);
   assert.match(result.blockedReason, /No ready/);
+});
+
+test('ask degrades sandbox-limited Codex and falls back to metadata', async () => {
+  const dir = project('ak-ask-codex-sandbox-');
+  writeAgent(dir, 'codex-bwrap.js', 'console.error("bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted");process.exit(1);');
+  configureAgents(dir, { codex: 'node scripts/codex-bwrap.js {prompt}' });
+
+  const result = await runAsk({ root: dir, prompt: 'Explain this project', mode: 'answer', agents: ['codex'] });
+  const text = renderAsk(result);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.winner, 'project-metadata');
+  assert.equal(result.selection.strategy, 'metadata_fallback');
+  assert.match(text, /Codex CLI is installed, but its internal sandbox cannot run here/);
+  assert.match(text, /project metadata/i);
+  assert.doesNotMatch(text, /RTM_NEWADDR|bwrap|loopback/i);
+  const saved = loadConfig(dir);
+  assert.equal(saved.agents.codex.readinessState, 'degraded');
 });
 
 test('patch mode is isolated by default and apply-winner copies only winner changes', async () => {

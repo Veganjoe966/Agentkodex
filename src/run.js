@@ -306,6 +306,7 @@ function createQaReport({ task, gateResults, agentRun, security, diffStat, gover
     else failed.push({ gate: gate.gate, command: gate.command, exitCode: gate.result?.exitCode, stderrTail: gate.result?.stderrTail });
   }
   const blockingIssues = [];
+  if (gateResults.length && gateResults.every((gate) => gate.skipped || gate.result?.skipped || !gate.result)) blockingIssues.push('Required gates were skipped or not run.');
   if (agentRun.result?.capability?.allowed === false) blockingIssues.push(`Capability denied: ${agentRun.result.capability.reason}`);
   if (blocksCompletion(governance)) blockingIssues.push('Governance evidence blocked completion.');
   if (agentRun.result && agentRun.result.exitCode && agentRun.result.exitCode !== 0 && !agentRun.result.skipped) blockingIssues.push(`Agent command failed with exit code ${agentRun.result.exitCode}.`);

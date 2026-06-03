@@ -15,6 +15,7 @@ const { cockpitCommand } = require('./cockpit');
 const { gatesCommand } = require('./gatesCli');
 const { auditBundleCommand, auditCommand } = require('./audit/command');
 const { helpText } = require('./help');
+const { commandHelp, isHelpRequest } = require('./helpContract');
 const { intelligenceCommand } = require('./intelligence/command');
 const { routeCommand } = require('./router/command');
 const { scorecardsCommand } = require('./scorecards/command');
@@ -35,6 +36,10 @@ const { reconcileRunStatus } = require('./runtime/lifecycle');
 
 async function main(argv) {
   const [command = 'help', ...rest] = argv;
+  if (isHelpRequest(command, rest)) {
+    console.log(commandHelp(command));
+    return;
+  }
   switch (command) {
     case 'init':
       return initCommand(rest);

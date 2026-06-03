@@ -3,12 +3,14 @@
 const fs = require('fs');
 const path = require('path');
 const { runTask } = require('../run');
-const { ensureKodex, kodexPath, loadConfig } = require('../kodexStore');
+const { ensureKodex, kodexPath, loadConfig, saveConfig } = require('../kodexStore');
 const { collectRunMetrics, scoreMetrics } = require('../core/scoring/metrics');
 const { copyDirFiltered, ensureDir, readJson, timestampId, slugify, writeJson, writeText } = require('../utils');
 const { writeAuditEvidence } = require('../audit/evidence');
+const { classifyAdapterRuntimeLimit } = require('../adapters/runtimeLimit');
 const { readAskCache, writeAskCache } = require('./internalCache');
 const { judgeWinner } = require('./judge');
+const { buildMetadataFallback } = require('./metadataFallback');
 const { recordAskReputation } = require('./reputation');
 const { planAskStrategy } = require('./strategy');
 
@@ -27,7 +29,7 @@ async function runAsk(options = {}) {
     const cached = readAskCache(root, cacheInput);
     if (cached.hit) return fromCache(cached.value, cached.cacheId);
   }
-  if (!agents.length) return failedResult({ prompt, mode, reason: 'No ready coding agents found. Run: agentkodex setup' });
+  if (!agents.length) return noReadyResult(root, prompt, mode);
 
   const id = `${timestampId()}-${slugify(prompt, 48)}`;
   const askDir = kodexPath(root, 'asks', id);
@@ -38,7 +40,14 @@ async function runAsk(options = {}) {
   const deterministicWinner = chooseWinner(candidates, mode);
   const judge = await judgeWinner({ root, askDir, id, prompt, candidates: eligibleCandidates(candidates, mode), config, judge: strategy.internalJudge, timeoutMs: options.timeoutMs });
   const winner = judge.winner || deterministicWinner;
-  const result = buildResult({ id, askDir, prompt, mode, candidates, winner, judge, strategy, options });
+  let result = buildResult({ id, askDir, prompt, mode, candidates, winner, judge, strategy, options });
+  if (!result.ok && canMetadataFallback(mode) && adapterWarnings(candidates).length) {
+    result = buildMetadataFallback(root, prompt, mode, {
+      adapterWarnings: adapterWarnings(candidates),
+      reason: 'One or more external coding agents could not run in this environment.',
+    });
+    result.artifactsPath = askDir;
+  }
   if (winner && mode === 'patch' && options.applyWinner) applyWinnerPatch(root, winner, result, Boolean(options.yes));
   recordAskReputation(root, prompt, candidates, result.ok ? result.winner : null);
   if (result.ok) result.cacheId = writeAskCache(root, cacheInput, result);
@@ -67,9 +76,11 @@ async function runCandidate(input) {
   });
   const endedAt = new Date().toISOString();
   const metrics = collectRunMetrics({ root: workDir, run, agent: input.agent, task: input.prompt, startedAt, endedAt });
-  const response = responseFromRun(run);
+  const adapterLimit = runtimeLimitFromRun(input.agent, run);
+  if (adapterLimit) markAdapterDegraded(input.root, input.config, input.agent, adapterLimit);
+  const response = adapterLimit ? '' : responseFromRun(run);
   const score = Math.round((scoreMetrics(metrics, 'balanced') + answerScore(response)) * 100) / 100;
-  return { agent: input.agent, status: run.status.status, runDir: run.dir, workDir, response, metrics, score };
+  return { agent: input.agent, status: run.status.status, runDir: run.dir, workDir, response, metrics, score, adapterLimit };
 }
 
 function chooseWinner(candidates, mode) {
@@ -93,6 +104,7 @@ function buildResult(input) {
     mode: input.mode,
     response: winner?.response || '',
     scores: input.candidates.map((item) => ({ agent: item.agent, score: item.score, status: item.status, gates: item.metrics.gates, filesChanged: item.metrics.filesChanged, diffBytes: item.metrics.diffSizeBytes })),
+    adapterWarnings: adapterWarnings(input.candidates),
     selection: {
       strategy: input.strategy?.execution || 'deterministic',
       confidence: input.strategy?.confidence ?? null,
@@ -105,7 +117,7 @@ function buildResult(input) {
     applied: false,
     servedFromCache: false,
     cacheId: null,
-    blockedReason: ok ? null : 'All candidates failed or were blocked.',
+    blockedReason: ok ? null : blockedReason(input.candidates),
   };
   if (input.options?.includeInternalDetails) result.judge = input.judge;
   return result;
@@ -140,6 +152,49 @@ function applyWinnerPatch(root, winner, result, yes) {
 function responseFromRun(run) {
   const result = run.agentRun?.result || {};
   return String(result.stdoutTail || result.stdout || result.stderrTail || '').trim();
+}
+
+function runtimeLimitFromRun(agent, run) {
+  const result = run.agentRun?.result || {};
+  const text = [
+    run.agentRun?.error,
+    result.stdout,
+    result.stdoutTail,
+    result.stderr,
+    result.stderrTail,
+  ].filter(Boolean).join('\n');
+  return classifyAdapterRuntimeLimit(agent, text);
+}
+
+function markAdapterDegraded(root, config, agent, limit) {
+  if (!config.agents?.[agent]) return;
+  config.agents[agent].readinessState = 'degraded';
+  config.agents[agent].readinessReason = limit.message;
+  config.agents[agent].readinessHint = limit.hint;
+  config.agents[agent].lastDegradedAt = new Date().toISOString();
+  saveConfig(root, config);
+  writeAuditEvidence(root, { type: 'adapter_degraded', allowed: true, agentId: agent, reason: limit.message });
+}
+
+function adapterWarnings(candidates = []) {
+  return candidates
+    .map((item) => item.adapterLimit)
+    .filter(Boolean)
+    .map((limit) => ({ agent: limit.agentId, message: limit.message, hint: limit.hint, code: limit.code }));
+}
+
+function blockedReason(candidates = []) {
+  const warnings = adapterWarnings(candidates);
+  if (warnings.length) return warnings.map((item) => `${item.message} ${item.hint}`).join(' ');
+  return 'All candidates failed or were blocked.';
+}
+
+function noReadyResult(root, prompt, mode) {
+  return failedResult({ prompt, mode, reason: 'No ready coding agents found. Run: agentkodex setup' });
+}
+
+function canMetadataFallback(mode) {
+  return ['answer', 'review'].includes(mode);
 }
 
 function askPrompt(prompt, mode) {
@@ -195,6 +250,14 @@ function renderAsk(result) {
   lines.push('Reason:');
   lines.push(humanAskReason(result));
   lines.push('');
+  if (result.adapterWarnings?.length) {
+    lines.push('Unavailable agents:');
+    for (const warning of result.adapterWarnings) {
+      lines.push(`- ${warning.message}`);
+      lines.push(`  ${warning.hint}`);
+    }
+    lines.push('');
+  }
   lines.push('Result:');
   lines.push(result.response || result.blockedReason || '(no response)');
   lines.push('');
@@ -205,6 +268,7 @@ function renderAsk(result) {
 function humanAskReason(result) {
   if (!result.ok) return result.blockedReason || 'No ready agent produced a usable result.';
   if (result.servedFromCache) return 'Same request and project state were already answered safely.';
+  if (result.selection?.strategy === 'metadata_fallback') return 'No external coding agent was runnable, so Agentkodex used project metadata.';
   if (result.scores.length > 1) return 'Produced the strongest solution.';
   return 'Best match for this task.';
 }

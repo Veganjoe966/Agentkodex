@@ -3,6 +3,7 @@
 const { spawn } = require('child_process');
 const { shellQuote } = require('./utils');
 const { commandExists, firstCommandToken } = require('./sessionRunner');
+const { classifyAdapterRuntimeLimit } = require('./adapters/runtimeLimit');
 
 const TRUSTED_AGENT_BINARIES = {
   codex: ['codex'],
@@ -121,9 +122,12 @@ async function withReadiness(agent) {
 
 async function assessReadiness(agent) {
   const configured = Boolean(agent.commandTemplate) || ['local', 'shell'].includes(agent.id) || Boolean(agent.explicit);
+  const runtimeLimit = classifyAdapterRuntimeLimit(agent.id, `${agent.reason || ''}\n${agent.readinessReason || ''}`);
   if (agent.readinessState === 'disabled') return readiness('disabled', configured, false, agent.reason || 'Agent disabled by config.', 'Enable the adapter in .agentkodex/config.json to use it.');
   if (!agent.installed) return readiness('missing', configured, false, agent.reason || 'Agent binary or command template is missing.', agent.reason || 'Install the CLI or configure a command template.');
   if (!configured) return readiness('configured', false, false, 'No command template configured.', `Run: agentkodex agents set ${agent.id || 'custom'} --cmd "your-cli {promptFile}"`);
+  if (agent.readinessState === 'degraded') return readiness('degraded', configured, false, runtimeLimit?.message || agent.readinessReason || agent.reason || 'Agent is degraded in this environment.', runtimeLimit?.hint || 'Run setup again after fixing the adapter environment.');
+  if (agent.readinessState === 'smoke_failed' || agent.readinessState === 'failed_smoke') return readiness(agent.readinessState, configured, false, agent.readinessReason || agent.reason || 'Adapter smoke check failed.', 'Run setup again after fixing the adapter environment.');
   if (agent.readinessState === 'installed_not_authenticated') return readiness(agent.readinessState, configured, false, agent.reason, 'Authenticate or enable the provider CLI, then run agentkodex doctor again.');
   if (requiresNonInteractiveTemplate(agent)) {
     return readiness('installed_not_noninteractive_ready', configured, false, 'Binary exists, but the configured launch does not include a prompt/task argument.', `Configure a non-interactive template, for example: agentkodex agents set ${agent.id} --cmd "${agent.binary || agent.id} {promptFile}"`);
