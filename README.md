@@ -21,6 +21,16 @@ agentkodex --help
 agentkodex doctor
 ```
 
+## First run
+
+Inside a project, start with one friendly setup command:
+
+```bash
+agentkodex quickstart
+```
+
+It initializes `.agentkodex/`, discovers commands, rebuilds repo intelligence, checks available agents, suggests gates, writes `.agentkodex/QUICKSTART.md`, and prints the next commands to run.
+
 ## What is included in this build
 
 This is a working Node.js CLI package with no required third-party runtime dependencies.
@@ -69,12 +79,9 @@ node bin/agentkodex.js --help
 Inside any software project:
 
 ```bash
-agentkodex init
-agentkodex discover
-agentkodex intelligence rebuild
-agentkodex route "fix the failing tests"
-agentkodex agents list
-agentkodex run --skip-agent "Verify the project with discovered gates"
+agentkodex quickstart
+agentkodex gates run --gates lint,test,build
+agentkodex cockpit
 ```
 
 Run a persistent Runtime v2 session:

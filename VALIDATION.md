@@ -59,6 +59,7 @@ TMP=$(mktemp -d)
 cp -R examples/sample-js/. "$TMP/"
 rm -rf "$TMP/.agentkodex"
 
+node bin/agentkodex.js quickstart --cwd "$TMP"
 node bin/agentkodex.js init --cwd "$TMP"
 node bin/agentkodex.js discover --cwd "$TMP"
 node bin/agentkodex.js session start --cwd "$TMP" --agent shell --command "node -e \"console.log('hello agentkodex')\"" --mode sandbox_auto --yes --wait --gates none "smoke"
@@ -71,6 +72,7 @@ node bin/agentkodex.js cockpit --cwd "$TMP" --once
 Result:
 
 - `init` discovered 5 commands.
+- `quickstart` wrote `.agentkodex/QUICKSTART.md` with discovered commands, gates, agent availability, and next commands.
 - replay showed `hello agentkodex` and `[exit 0]`.
 - gates `lint`, `test`, and `build` all exited 0 with per-gate output logs.
 - session finalization wrote final report and passed QA.
@@ -119,6 +121,7 @@ Result: wrote `.agentkodex/swarms/<id>/manifest.json` and `summary.md`; the buil
 - discovery: Java, .NET, e2e, Taskfile
 - policy: observe-mode read-only enforcement, manual approval patterns, redaction
 - gates: per-gate output capture and gate report
+- quickstart: friendly first-run setup and reusable `.agentkodex/QUICKSTART.md`
 - audit bundle: manifest, summary, missing list, redaction
 - intelligence: persisted profiles and historical scorecards
 - router: scorecard-backed routing with insufficient-history behavior

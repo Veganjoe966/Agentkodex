@@ -19,6 +19,7 @@ const { intelligenceCommand } = require('./intelligence/command');
 const { routeCommand } = require('./router/command');
 const { scorecardsCommand } = require('./scorecards/command');
 const { swarmCommand } = require('./swarm/command');
+const { quickstartCommand } = require('./onboarding/quickstart');
 
 async function main(argv) {
   const [command = 'help', ...rest] = argv;
@@ -27,6 +28,9 @@ async function main(argv) {
       return initCommand(rest);
     case 'discover':
       return discoverCommand(rest);
+    case 'quickstart':
+    case 'setup':
+      return quickstartCommand(rest);
     case 'run':
       return runCommand(rest);
     case 'gates':

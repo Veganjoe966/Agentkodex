@@ -5,6 +5,7 @@ function helpText() {
 
 Usage:
   agentkodex init [--cwd path]
+  agentkodex quickstart [--cwd path]
   agentkodex discover [--json] [--cwd path]
   agentkodex intelligence show|rebuild
   agentkodex route "task"
@@ -51,6 +52,7 @@ Command template variables:
 
 Examples:
   agentkodex init
+  agentkodex quickstart
   agentkodex route "large refactor"
   agentkodex agents scorecards
   agentkodex intelligence rebuild
