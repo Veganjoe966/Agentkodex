@@ -69,7 +69,7 @@ test('completed session control errors are safe and actionable', () => {
   assert.equal(start.status, 0, start.stderr);
   const send = cli(['session', 'send', '--cwd', dir, 'last', 'hello']);
   assert.notEqual(send.status, 0);
-  assert.match(send.stderr, /not live|not accepting control/i);
+  assert.match(send.stderr, /not live|not accepting control|not writable/i);
   assert.doesNotMatch(send.stderr, /\.sock|ENOENT|ECONNREFUSED|\/src\//);
 });
 

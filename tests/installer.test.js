@@ -37,10 +37,13 @@ test('installer recovers from global npm EACCES with user-local prefix', () => {
   const fakeBin = path.join(temp, 'bin');
   const userPrefix = path.join(temp, 'user-prefix');
   fs.mkdirSync(fakeBin, { recursive: true });
-  fs.writeFileSync(path.join(fakeBin, 'node'), '#!/bin/sh\necho 20\n');
+fs.writeFileSync(path.join(fakeBin, 'node'), '#!/bin/sh\necho 20\n');
   fs.writeFileSync(path.join(fakeBin, 'npm'), `#!/bin/sh
 echo "$NPM_CONFIG_PREFIX $*" >> "${temp}/npm.log"
-if [ "$1 $2 $3" = "config get prefix" ]; then echo "${temp}/global-prefix"; exit 0; fi
+if [ "$1 $2 $3" = "config get prefix" ]; then
+  if [ -n "$NPM_CONFIG_PREFIX" ]; then echo "$NPM_CONFIG_PREFIX"; else echo "${temp}/global-prefix"; fi
+  exit 0
+fi
 if [ "$1 $2" = "install -g" ]; then
   if [ -z "$NPM_CONFIG_PREFIX" ]; then echo "npm ERR! code EACCES" >&2; exit 243; fi
   mkdir -p "$NPM_CONFIG_PREFIX/bin"
