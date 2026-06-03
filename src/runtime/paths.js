@@ -2,13 +2,14 @@
 
 const os = require('os');
 const path = require('path');
-const { ensureDir, hashString } = require('../utils');
+const { hashString } = require('../utils');
 const { ensureKodex, kodexPath } = require('../kodexStore');
+const { secureDir } = require('../security/controlPlane');
 
 function runtimeDir(root) {
   ensureKodex(root);
   const dir = kodexPath(root, 'runtime');
-  ensureDir(dir);
+  secureDir(dir);
   return dir;
 }
 
@@ -36,7 +37,7 @@ function daemonLogPath(root) {
 function socketPath(root) {
   const key = hashString(path.resolve(root), 20);
   if (process.platform === 'win32') return `\\\\.\\pipe\\agentkodex-${key}`;
-  return path.join(os.tmpdir(), `agentkodex-${key}.sock`);
+  return path.join(runtimeDir(root), `agentkodex-${key}.sock`);
 }
 
 // Backwards-compatible names for older internal modules.

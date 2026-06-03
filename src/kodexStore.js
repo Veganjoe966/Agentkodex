@@ -31,7 +31,7 @@ function ensureKodex(root) {
   if (!exists(errorsPath)) writeJson(errorsPath, { knownErrors: [] });
 
   const ignorePath = path.join(base, '.gitignore');
-  if (!exists(ignorePath)) writeText(ignorePath, ['runs/', 'tournaments/', 'sessions/', 'approvals/', 'audit/', 'swarms/', '*.log', 'transcript.cast', 'tmp/'].join('\n') + '\n');
+  if (!exists(ignorePath)) writeText(ignorePath, ['runs/', 'tournaments/', 'sessions/', 'approvals/', 'audit/', 'runtime/', 'swarms/', '*.log', 'transcript.cast', 'tmp/'].join('\n') + '\n');
 
   return base;
 }
@@ -54,6 +54,18 @@ function defaultConfig() {
       approvalQueue: true,
       redactSecrets: true,
       blockDestructiveCommands: true,
+    },
+    agentguard: {
+      enabled: true,
+      required: false,
+      source: null,
+      policyPath: '.agentkodex/agentguard-policy.yaml',
+    },
+    lintguard: {
+      enabled: true,
+      url: null,
+      authRequired: false,
+      gates: ['lint', 'typecheck'],
     },
     agents: {
       local: {

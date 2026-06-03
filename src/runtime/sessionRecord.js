@@ -6,6 +6,7 @@ const { ensureDir, exists, readJson, readText, writeJson, writeText } = require(
 const { ensureKodex, kodexPath } = require('../kodexStore');
 const { sessionDir, sessionFiles, makeSocketPath, newSessionId, sessionsDir } = require('./sessionPaths');
 const { refreshSessionLiveness } = require('./sessionProcess');
+const { ensureSessionToken } = require('./controlToken');
 
 function normalizeRecord(root, data = {}) {
   const id = data.id || newSessionId(`${data.agent || ''}:${data.task || ''}:${data.command || ''}`);
@@ -44,6 +45,7 @@ function normalizeRecord(root, data = {}) {
     pendingStart: data.pendingStart || null,
     promptFile: data.promptFile || files.missionPrompt || null,
     socketPath: data.socketPath || makeSocketPath(root, id),
+    controlTokenPath: data.controlTokenPath || files.controlToken,
     metadata: data.metadata || {},
     files,
     createdAt: data.createdAt || now,
@@ -65,6 +67,7 @@ function saveSessionRecord(root, record) {
   const normalized = normalizeRecord(root, { ...record, id: record.id, createdAt: record.createdAt });
   normalized.updatedAt = new Date().toISOString();
   ensureDir(path.dirname(normalized.files.session));
+  ensureSessionToken(normalized);
   writeJson(normalized.files.session, normalized);
   writeJson(normalized.files.metadata, normalized);
   writeText(kodexPath(root, 'last-session'), normalized.id);

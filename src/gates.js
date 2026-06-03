@@ -6,6 +6,8 @@ const { saveDiscovery, learnFromGateFailures } = require('./kodexStore');
 const { runCommand, formatDuration } = require('./sessionRunner');
 const { ensureDir, hashString, slugify, writeJson, writeText } = require('./utils');
 const { summarizeCommandResult } = require('./commandResult');
+const { runLintguardGate } = require('./lintguard/gate');
+const { runQualityGateAsGate } = require('./gates/qualityGate');
 
 async function runGateCommands(options) {
   const root = path.resolve(options.root || process.cwd());
@@ -20,6 +22,14 @@ async function runGateCommands(options) {
   const results = [];
   for (let index = 0; index < selected.length; index += 1) {
     const gateCommand = selected[index];
+    if (gateCommand.gate === 'lintguard') {
+      results.push(await runLintguardGate(root, outputDir, { url: options.lintguardUrl, mode: options.mode, yes: options.yes, timeoutMs: options.timeoutMs }));
+      continue;
+    }
+    if (gateCommand.gate === 'quality') {
+      results.push(await runQualityGateAsGate(root, outputDir, { mode: options.mode, yes: options.yes, timeoutMs: options.timeoutMs }));
+      continue;
+    }
     if (gateCommand.skipped) {
       results.push({ gate: gateCommand.gate, skipped: true, reason: gateCommand.reason });
       continue;

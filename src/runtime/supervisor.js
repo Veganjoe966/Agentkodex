@@ -7,9 +7,11 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { readJson, writeJson, appendText, ensureDir, shellQuote } = require('../utils');
 const { redactSecrets } = require('../policy');
+const { hardenSocket, sanitizeError } = require('../security/controlPlane');
 const { detectState, detectApproval, trimBuffer } = require('./stateDetector');
 const { patchSession, appendEvent } = require('./sessionStore');
 const { createApproval, markApproval } = require('./approvalQueue');
+const { ensureSessionToken, assertSessionToken } = require('./controlToken');
 
 function parseArgv(argv) {
   const out = {};
@@ -34,6 +36,7 @@ async function main(argv = process.argv.slice(2)) {
   if (!metadataPath) throw new Error('Supervisor missing --metadata <metadata.json>');
   let metadata = readJson(metadataPath, null);
   if (!metadata) throw new Error(`Could not read session metadata: ${metadataPath}`);
+  ensureSessionToken(metadata);
   const root = metadata.root;
   ensureDir(metadata.dir);
   ensureDir(path.dirname(metadata.files.transcript));
@@ -96,6 +99,7 @@ async function main(argv = process.argv.slice(2)) {
   }
 
   function handleRequest(socket, request) {
+    try { assertSessionToken(metadata, request); } catch (error) { return respond(socket, { ok: false, error: sanitizeError(error) }); }
     const action = request.action || 'status';
     if (action === 'status') {
       respond(socket, { ok: true, session: sanitizeMetadata(metadata), childAlive: Boolean(child && !child.killed) });
@@ -168,29 +172,30 @@ async function main(argv = process.argv.slice(2)) {
         buffer = buffer.slice(index + 1);
         if (!line) continue;
         try { handleRequest(socket, JSON.parse(line)); }
-        catch (error) { respond(socket, { ok: false, error: error.message }); }
+        catch (error) { respond(socket, { ok: false, error: sanitizeError(error) }); }
       }
     });
     socket.on('end', () => {
       if (!buffer.trim()) return;
       try { handleRequest(socket, JSON.parse(buffer.trim())); }
-      catch (error) { respond(socket, { ok: false, error: error.message }); }
+      catch (error) { respond(socket, { ok: false, error: sanitizeError(error) }); }
     });
   });
 
   await listen(server, metadata.socketPath);
   update({ status: 'running', state: 'starting', supervisorPid: process.pid, socketPath: metadata.socketPath, startedAt: new Date().toISOString() });
-  event({ type: 'session_started', command: metadata.command, cwd: metadata.cwd || root, pid: process.pid });
-
   const command = metadata.command;
+  const displayCommand = redactSecrets(command);
+  event({ type: 'session_started', command: displayCommand, cwd: metadata.cwd || root, pid: process.pid });
+
   const cwd = metadata.cwd || root;
   const env = { ...process.env, ...(metadata.env || {}) };
   const effectiveCommand = metadata.pty && process.platform !== 'win32'
     ? `script -qfec ${shellQuote(command)} /dev/null`
     : command;
 
-  fs.appendFileSync(metadata.files.transcript, `\n$ ${command}\n`, 'utf8');
-  event({ type: 'command_start', command, effectiveCommand, cwd });
+  fs.appendFileSync(metadata.files.transcript, `\n$ ${displayCommand}\n`, 'utf8');
+  event({ type: 'command_start', command: displayCommand, effectiveCommand: redactSecrets(effectiveCommand), cwd });
   child = spawn(effectiveCommand, { cwd, env, shell: true, stdio: ['pipe', 'pipe', 'pipe'] });
   update({ pid: child.pid, command, effectiveCommand });
 
@@ -235,6 +240,8 @@ async function main(argv = process.argv.slice(2)) {
 function sanitizeMetadata(metadata) {
   const copy = { ...metadata };
   delete copy.env;
+  delete copy.controlToken;
+  delete copy.token;
   return copy;
 }
 
@@ -243,6 +250,7 @@ function listen(server, socketPath) {
     server.once('error', reject);
     server.listen(socketPath, () => {
       server.off('error', reject);
+      hardenSocket(socketPath);
       resolve();
     });
   });

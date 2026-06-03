@@ -4,6 +4,16 @@ const { spawn } = require('child_process');
 const { shellQuote } = require('./utils');
 const { commandExists, firstCommandToken } = require('./sessionRunner');
 
+const TRUSTED_AGENT_BINARIES = {
+  codex: ['codex'],
+  'claude-code': ['claude'],
+  aider: ['aider'],
+  gemini: ['gemini'],
+  opencode: ['opencode'],
+  cursor: ['cursor-agent'],
+  copilot: ['gh'],
+};
+
 function listAgents(config) {
   return Object.entries(config.agents || {}).map(([id, agent]) => ({
     id,
@@ -44,16 +54,16 @@ async function detectAgent(config, agentId) {
       const resolvedTemplate = candidate === firstCommandToken(commandTemplate)
         ? commandTemplate
         : commandTemplate.replace(firstCommandToken(commandTemplate), candidate);
-      return { ...agent, commandTemplate: resolvedTemplate, installed: true, binary: candidate, reason: 'installed' };
+      return withTrust({ ...agent, commandTemplate: resolvedTemplate, installed: true, binary: candidate, reason: 'installed' });
     }
   }
-  return { ...agent, commandTemplate, installed: false, binary: candidates[0] || null, reason: `Binary not found: ${candidates.join(' or ')}` };
+  return withTrust({ ...agent, commandTemplate, installed: false, binary: candidates[0] || null, reason: `Binary not found: ${candidates.join(' or ')}` });
 }
 
 async function detectCopilot(agent, commandTemplate) {
   if (!(await commandExists('gh'))) return { ...agent, commandTemplate, installed: false, binary: 'gh', reason: 'Binary not found: gh' };
   const hasCopilot = await commandSucceeds('gh copilot --help');
-  return { ...agent, commandTemplate, installed: hasCopilot, binary: 'gh', reason: hasCopilot ? 'installed' : 'GitHub CLI found, but gh copilot is unavailable or not authenticated.' };
+  return withTrust({ ...agent, commandTemplate, installed: hasCopilot, binary: 'gh', reason: hasCopilot ? 'installed' : 'GitHub CLI found, but gh copilot is unavailable or not authenticated.' });
 }
 
 function commandSucceeds(command) {
@@ -94,6 +104,17 @@ function buildAgentCommand(agent, context) {
     task: shellQuote(context.task),
   };
   return template.replace(/\{(promptFile|prompt|cwd|runDir|task)\}/g, (_, key) => replacements[key]);
+}
+
+function withTrust(agent) {
+  const allowed = TRUSTED_AGENT_BINARIES[agent.id] || [];
+  const template = String(agent.commandTemplate || '');
+  const binary = agent.binary || firstCommandToken(template);
+  const hasShellControl = /(?:&&|\|\||[;\n`]|[$]\()/g.test(template);
+  return {
+    ...agent,
+    trustedLaunch: Boolean(agent.installed && allowed.includes(binary) && !hasShellControl && agent.kind !== 'custom'),
+  };
 }
 
 function setAgentCommand(config, agentId, commandTemplate, stdin = null) {
@@ -166,4 +187,5 @@ module.exports = {
   setAgentCommand,
   recommendAgents,
   renderAgentTable,
+  withTrust,
 };

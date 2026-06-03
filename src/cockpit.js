@@ -6,6 +6,8 @@ const { URL } = require('url');
 const { parseArgs, stringFlag, booleanFlag, listFlag } = require('./args');
 const { ensureKodex, kodexPath } = require('./kodexStore');
 const { readText, readJson } = require('./utils');
+const { sanitizeError } = require('./security/controlPlane');
+const { assertSafeBind, createCockpitAuth, rejectUnauthorized } = require('./cockpitAuth');
 const {
   sendToSession,
   interruptSession,
@@ -38,10 +40,12 @@ async function cockpitCommand(argv) {
   }
   const host = stringFlag(flags, 'host', '127.0.0.1');
   const port = Number(stringFlag(flags, 'port', process.env.AGENTKODEX_COCKPIT_PORT || '3919'));
-  const server = await startCockpit(root, { host, port });
+  const auth = createCockpitAuth(root, { token: stringFlag(flags, 'token', '') });
+  const server = await startCockpit(root, { host, port, auth, unsafePublic: booleanFlag(flags, 'unsafe-public') });
   const address = server.address();
   const url = `http://${host}:${address.port}`;
   console.log(`Agentkodex Cockpit running at ${url}`);
+  console.log(`Auth token: ${booleanFlag(flags, 'show-token') || booleanFlag(flags, 'print-token') ? auth.token : `(hidden; stored at ${auth.tokenPath})`}`);
   console.log(`Project root: ${root}`);
   console.log('Press Ctrl+C to stop.');
   if (booleanFlag(flags, 'open')) openBrowser(url);
@@ -50,7 +54,10 @@ async function cockpitCommand(argv) {
 function startCockpit(root, options = {}) {
   const host = options.host || '127.0.0.1';
   const port = Number(options.port ?? 3919);
-  const server = http.createServer((req, res) => handleRequest(root, req, res));
+  assertSafeBind(host, Boolean(options.unsafePublic));
+  const auth = options.auth || createCockpitAuth(root, options);
+  const server = http.createServer((req, res) => handleRequest(root, req, res, { auth, host }));
+  server.agentkodexAuth = { tokenPath: auth.tokenPath };
   return new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, host, () => {
@@ -60,9 +67,13 @@ function startCockpit(root, options = {}) {
   });
 }
 
-async function handleRequest(root, req, res) {
+async function handleRequest(root, req, res, context = {}) {
   try {
     const url = new URL(req.url, 'http://agentkodex.local');
+    if (url.pathname.startsWith('/api/')) {
+      const rejected = rejectUnauthorized(req, url, context.auth, context.host);
+      if (rejected) return json(res, rejected.body, rejected.status);
+    }
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) return html(res, renderHtml(root));
     if (req.method === 'GET' && url.pathname === '/api/health') return json(res, { ok: true, root, time: new Date().toISOString() });
     if (req.method === 'GET' && url.pathname === '/api/status') return json(res, snapshot(root));
@@ -80,7 +91,7 @@ async function handleRequest(root, req, res) {
 
     return notFound(res);
   } catch (error) {
-    return json(res, { ok: false, error: error.stack || error.message || String(error) }, 500);
+    return json(res, { ok: false, error: sanitizeError(error) }, 500);
   }
 }
 
@@ -182,7 +193,7 @@ function renderHtml(root) {
 <body><header><h1>Agentkodex Cockpit <span class="muted">Runtime v2</span></h1><div class="muted small">Live session control, transcript replay, approvals, and gates.</div></header>
 <main class="grid"><section class="panel"><h2>Sessions</h2><div id="sessions" class="body empty">Loading…</div><h2>Approvals</h2><div id="approvals" class="body empty">Loading…</div></section><section class="panel"><h2 id="title">No session selected</h2><div class="body"><div id="meta" class="muted small"></div><div class="toolbar"><button onclick="refresh()">Refresh</button><button class="secondary" onclick="interruptSelected()">Interrupt</button><button class="danger" onclick="killSelected()">Kill</button><button class="secondary" onclick="closeStdinSelected()">Close stdin</button></div><textarea id="input" placeholder="Send a message or keystrokes into the live agent session..."></textarea><div class="toolbar"><button onclick="sendSelected()">Send</button><button class="secondary" onclick="loadEvents()">Show events</button><button class="secondary" onclick="loadTranscript()">Show transcript</button></div></div><pre id="terminal">Select a session from the left.</pre><div class="footer muted small">Auto-refreshes every 2 seconds while open.</div></section></main>
 <script>
-let selected=null;async function api(p,o){const r=await fetch(p,o);const t=await r.text();try{return JSON.parse(t)}catch{return t}}function esc(s){return String(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}async function refresh(){await loadSessions();await loadApprovals();if(selected)await loadTranscript()}async function loadSessions(){const data=await api('/api/sessions');const box=document.getElementById('sessions');const sessions=data.sessions||[];if(!sessions.length){box.className='body empty';box.textContent='No sessions yet. Start one with agentkodex session start.';return}box.className='body';box.innerHTML=sessions.map(s=>'<div class="item '+(selected===s.id?'active':'')+'" onclick="selectSession(\''+s.id+'\')"><div><span class="badge">'+esc(s.status||'')+'</span><span class="badge">'+esc(s.state||'')+'</span></div><b>'+esc(s.id)+'</b><div class="muted small">'+esc(s.agent||'')+' · '+esc(s.task||'')+'</div></div>').join('');if(!selected)await selectSession(sessions[0].id)}async function loadApprovals(){const data=await api('/api/approvals');const box=document.getElementById('approvals');const list=data.approvals||[];if(!list.length){box.className='body empty';box.textContent='No pending approvals.';return}box.className='body';box.innerHTML=list.map(a=>'<div class="item approval"><b>'+esc(a.id)+'</b><div class="small">'+esc(a.kind||'')+' · session '+esc(a.sessionId||'-')+'</div><div class="muted small">'+esc(a.reason||a.prompt||a.text||'')+'</div><div class="toolbar"><button onclick="approve(\''+a.id+'\')">Approve</button><button class="danger" onclick="deny(\''+a.id+'\')">Deny</button></div></div>').join('')}async function selectSession(id){selected=id;document.getElementById('title').textContent='Session '+id;const data=await api('/api/sessions/'+id);const s=data.session||{};document.getElementById('meta').innerHTML='<span class="badge">'+esc(s.status||'')+'</span><span class="badge">'+esc(s.state||'')+'</span> PID '+esc(s.pid||'-')+' · '+esc(s.command||'');await loadTranscript()}async function loadTranscript(){if(!selected)return;const t=await fetch('/api/sessions/'+selected+'/transcript').then(r=>r.text());const term=document.getElementById('terminal');term.textContent=t||'(no transcript yet)';term.scrollTop=term.scrollHeight}async function loadEvents(){if(!selected)return;const t=await fetch('/api/sessions/'+selected+'/events').then(r=>r.text());document.getElementById('terminal').textContent=t||'(no events yet)'}async function sendSelected(){if(!selected)return;const text=document.getElementById('input').value;await api('/api/sessions/'+selected+'/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text})});document.getElementById('input').value='';await loadTranscript()}async function interruptSelected(){if(selected)await api('/api/sessions/'+selected+'/interrupt',{method:'POST'});await refresh()}async function killSelected(){if(selected&&confirm('Kill this session?'))await api('/api/sessions/'+selected+'/kill',{method:'POST'});await refresh()}async function closeStdinSelected(){if(selected)await api('/api/sessions/'+selected+'/close-stdin',{method:'POST'});await refresh()}async function approve(id){await api('/api/approvals/'+id+'/approve',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});await refresh()}async function deny(id){await api('/api/approvals/'+id+'/deny',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});await refresh()}refresh();setInterval(refresh,2000);
+let selected=null;const qs=new URLSearchParams(location.search);let cockpitToken=localStorage.getItem('agentkodexCockpitToken')||qs.get('token')||prompt('Agentkodex Cockpit token');if(cockpitToken)localStorage.setItem('agentkodexCockpitToken',cockpitToken);function opts(o={}){const h=Object.assign({},o.headers||{},{authorization:'Bearer '+cockpitToken});if((o.method||'GET').toUpperCase()!=='GET')h['x-agentkodex-csrf']='1';return Object.assign({},o,{headers:h})}async function api(p,o){const r=await fetch(p,opts(o));const t=await r.text();try{return JSON.parse(t)}catch{return t}}async function txt(p){return fetch(p,opts()).then(r=>r.text())}function esc(s){return String(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}async function refresh(){await loadSessions();await loadApprovals();if(selected)await loadTranscript()}async function loadSessions(){const data=await api('/api/sessions');const box=document.getElementById('sessions');const sessions=data.sessions||[];if(!sessions.length){box.className='body empty';box.textContent='No sessions yet. Start one with agentkodex session start.';return}box.className='body';box.innerHTML=sessions.map(s=>'<div class="item '+(selected===s.id?'active':'')+'" onclick="selectSession(\''+s.id+'\')"><div><span class="badge">'+esc(s.status||'')+'</span><span class="badge">'+esc(s.state||'')+'</span></div><b>'+esc(s.id)+'</b><div class="muted small">'+esc(s.agent||'')+' · '+esc(s.task||'')+'</div></div>').join('');if(!selected)await selectSession(sessions[0].id)}async function loadApprovals(){const data=await api('/api/approvals');const box=document.getElementById('approvals');const list=data.approvals||[];if(!list.length){box.className='body empty';box.textContent='No pending approvals.';return}box.className='body';box.innerHTML=list.map(a=>'<div class="item approval"><b>'+esc(a.id)+'</b><div class="small">'+esc(a.kind||'')+' · session '+esc(a.sessionId||'-')+'</div><div class="muted small">'+esc(a.reason||a.prompt||a.text||'')+'</div><div class="toolbar"><button onclick="approve(\''+a.id+'\')">Approve</button><button class="danger" onclick="deny(\''+a.id+'\')">Deny</button></div></div>').join('')}async function selectSession(id){selected=id;document.getElementById('title').textContent='Session '+id;const data=await api('/api/sessions/'+id);const s=data.session||{};document.getElementById('meta').innerHTML='<span class="badge">'+esc(s.status||'')+'</span><span class="badge">'+esc(s.state||'')+'</span> PID '+esc(s.pid||'-')+' · '+esc(s.command||'');await loadTranscript()}async function loadTranscript(){if(!selected)return;const t=await txt('/api/sessions/'+selected+'/transcript');const term=document.getElementById('terminal');term.textContent=t||'(no transcript yet)';term.scrollTop=term.scrollHeight}async function loadEvents(){if(!selected)return;const t=await txt('/api/sessions/'+selected+'/events');document.getElementById('terminal').textContent=t||'(no events yet)'}async function sendSelected(){if(!selected)return;const text=document.getElementById('input').value;await api('/api/sessions/'+selected+'/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text})});document.getElementById('input').value='';await loadTranscript()}async function interruptSelected(){if(selected)await api('/api/sessions/'+selected+'/interrupt',{method:'POST'});await refresh()}async function killSelected(){if(selected&&confirm('Kill this session?'))await api('/api/sessions/'+selected+'/kill',{method:'POST'});await refresh()}async function closeStdinSelected(){if(selected)await api('/api/sessions/'+selected+'/close-stdin',{method:'POST'});await refresh()}async function approve(id){await api('/api/approvals/'+id+'/approve',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});await refresh()}async function deny(id){await api('/api/approvals/'+id+'/deny',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});await refresh()}refresh();setInterval(refresh,2000);
 </script></body></html>`;
 }
 

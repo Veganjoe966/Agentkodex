@@ -47,6 +47,9 @@ Implemented capabilities:
 - Tournament mode for comparing multiple agents on the same task in isolated repo copies with metrics, configurable winner strategy, and scorecards.
 - Repo intelligence profiles, agent routing, agent scorecards, local audit bundles, and swarm execution orchestration.
 - Policy engine with safe, approval-required, and blocked command categories.
+- Optional first-party Agentguard capability bridge for signed command authorization before execution.
+- Agent operations gates: `agentkodex quality check` for completion quality and an Agentguard-compatible security gate interface.
+- Optional Lintguard sidecar quality gate via `agentkodex lintguard check`.
 - Secret redaction in logs.
 - Test suite covering discovery, policy, one-shot runs, Runtime v2 sessions, daemon compatibility, Cockpit API, and command execution.
 
@@ -57,6 +60,7 @@ Agentkodex does **not** bundle paid or proprietary coding-agent CLIs. Install yo
 - Node.js 18+
 - A Unix-like shell is recommended for best terminal behavior.
 - Optional external coding agents on `PATH`, such as `codex`, `claude`, `aider`, `gemini`, `opencode`, or `cursor-agent`.
+- Optional Agentguard source path for capability signing, set with `AGENTGUARD_SOURCE=/path/to/Agentguard` or `.agentkodex/config.json`.
 
 ## Install locally from a checkout
 
@@ -80,7 +84,9 @@ Inside any software project:
 
 ```bash
 agentkodex quickstart
+agentkodex quality check
 agentkodex gates run --gates lint,test,build
+agentkodex lintguard check --local
 agentkodex cockpit
 ```
 
@@ -210,6 +216,8 @@ Start the local UI:
 agentkodex cockpit --host 127.0.0.1 --port 3919
 ```
 
+Cockpit API requests require a bearer token stored at `.agentkodex/runtime/cockpit.token`. Start with `--show-token` when you need to paste it into a browser or automation client. Binding to a non-loopback host is refused unless `--unsafe-public` is explicit.
+
 Cockpit provides:
 
 - session list
@@ -301,11 +309,22 @@ Template variables:
 
 ## Safety model
 
+Command execution now follows this path when Agentguard is available:
+
+```text
+Agentkodex Node runtime
+  -> Agentguard authorization bridge
+  -> policy/capability decision
+  -> execute only when both layers allow it
+```
+
+Agentguard writes signed capability evidence and audit events under `.agentkodex/runtime/`. If Agentguard is unavailable, Agentkodex falls back to its built-in JS policy unless `.agentkodex/config.json` sets `agentguard.required` to `true`.
+
 Modes:
 
 - `observe`: permits only read-only inspection commands.
 - `supervised`: safe commands run; unknown/risky commands require approval.
-- `sandbox_auto`: broader command allowance for disposable workspaces, but manual approval is still required for destructive/production actions.
+- `sandbox_auto`: broader command allowance for disposable workspaces, but approval-required commands still need explicit `--yes`.
 - `trusted_auto`: broad local automation; destructive/production actions still require explicit `--yes`, and blocked commands still fail.
 
 Blocked by default:
@@ -325,12 +344,43 @@ Approval-required examples:
 - deploy commands
 - migrations
 
+## Quality and Lintguard Gates
+
+The canonical Agentkodex completion gate is:
+
+```bash
+agentkodex quality check
+npm run quality:gate
+agentkodex gates run --gates quality
+```
+
+It emits machine-readable JSON with `ok`, `summary`, `checks`, `filesChecked`, and `blockedReason`. The gate runs real discovered lint/typecheck/Ruff/test commands when present, then enforces local LOC and architecture hygiene checks. A failed quality gate blocks completion through the normal `failed_gates` status.
+
+Agentkodex can run Lintguard as a local or sidecar-backed completion gate:
+
+```bash
+agentkodex lintguard check --local
+agentkodex gates run --gates lintguard
+npm run lintguard:check
+```
+
+For a running Lintguard sidecar:
+
+```bash
+export LINTGUARD_URL=http://127.0.0.1:8001
+export LINTGUARD_API_TOKEN=replace-with-local-secret
+agentkodex lintguard check --url "$LINTGUARD_URL" --auth-enabled
+```
+
+The Lintguard command always returns JSON with `ok`, `violations`, `errors`, `warnings`, `filesChecked`, and `commandOutputs`. See `docs/LINTGUARD_AGENTKODEX_INTEGRATION.md` and `docs/AGENT_OPERATIONS_PLATFORM.md`.
+
 ## Development
 
 Run the full test suite:
 
 ```bash
 npm test
+npm run quality:gate
 ```
 
 Run a local smoke test against the included sample project:

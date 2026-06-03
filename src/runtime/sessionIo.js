@@ -2,12 +2,13 @@
 
 const path = require('path');
 const { exists, readText, writeText, appendText } = require('../utils');
+const { redactSecrets, redactObject } = require('../security/redaction');
 const { normalizeRecord, loadSessionRecord, saveSessionRecord } = require('./sessionRecord');
 
 function appendEvent(arg1, arg2, arg3) {
   const { root, id, event } = normalizeEventArgs(arg1, arg2, arg3);
   const record = loadSessionRecord(root, id) || normalizeRecord(root, { id });
-  const payload = { ts: new Date().toISOString(), timestamp: new Date().toISOString(), sessionId: id, ...event };
+  const payload = redactObject({ ts: new Date().toISOString(), timestamp: new Date().toISOString(), sessionId: id, ...event });
   appendText(record.files.events, `${JSON.stringify(payload)}\n`);
   return payload;
 }
@@ -19,12 +20,12 @@ function appendSessionEvent(session, event) {
 function appendTranscript(arg1, arg2, arg3) {
   const { root, id, text } = normalizeTextArgs(arg1, arg2, arg3);
   const record = loadSessionRecord(root, id) || normalizeRecord(root, { id });
-  appendText(record.files.transcript, String(text || ''));
+  appendText(record.files.transcript, redactSecrets(String(text || '')));
 }
 
 function appendInput(root, id, data) {
   const record = loadSessionRecord(root, id) || normalizeRecord(root, { id });
-  appendText(record.files.input, String(data || ''));
+  appendText(record.files.input, redactSecrets(String(data || '')));
   appendEvent(root, id, { type: 'input.logged', bytes: Buffer.byteLength(String(data || '')) });
 }
 

@@ -14,6 +14,18 @@
     "redactSecrets": true,
     "blockDestructiveCommands": true
   },
+  "agentguard": {
+    "enabled": true,
+    "required": false,
+    "source": "../agentguard/Agentguard",
+    "policyPath": ".agentkodex/agentguard-policy.yaml"
+  },
+  "lintguard": {
+    "enabled": true,
+    "url": "http://127.0.0.1:8001",
+    "authRequired": true,
+    "gates": ["lint", "typecheck"]
+  },
   "agents": {
     "custom": {
       "kind": "custom",

@@ -30,8 +30,11 @@ test('manual approval patterns still require explicit yes in auto modes', () => 
 });
 
 test('redacts secret-looking values', () => {
-  const redacted = redactSecrets('API_KEY=abc123 SECRET=supersecretvalue Authorization: Bearer tokenvalue');
+  const redacted = redactSecrets('API_KEY=abc123 SECRET=supersecretvalue Authorization: Bearer tokenvalue github_pat_abcdefghijklmnopqrstuvwxyz npm_abcdefghijklmnopqrstuvwxyz sk_live_abcdefghijklmnopqrstuvwxyz');
   assert.match(redacted, /API_KEY=\[REDACTED\]/);
   assert.match(redacted, /SECRET=\[REDACTED\]/);
   assert.match(redacted, /Bearer \[REDACTED\]/);
+  assert.doesNotMatch(redacted, /github_pat_/);
+  assert.doesNotMatch(redacted, /npm_/);
+  assert.doesNotMatch(redacted, /sk_live_/);
 });

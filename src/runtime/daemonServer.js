@@ -5,7 +5,10 @@ const net = require('net');
 const path = require('path');
 const { spawn } = require('child_process');
 const { ensureDir, appendText, shellQuote } = require('../utils');
-const { policyAllows, redactSecrets } = require('../policy');
+const { redactSecrets } = require('../policy');
+const { authorizeCommand } = require('../authorization');
+const { hardenSocket, sanitizeError } = require('../security/controlPlane');
+const { ensureDaemonToken, assertDaemonToken } = require('./daemonAuth');
 const {
   socketPathForRoot,
   writeDaemonInfo,
@@ -30,6 +33,7 @@ class AgentkodexDaemon {
     this.buffers = new Map();
     this.server = null;
     this.options = options;
+    this.token = ensureDaemonToken(this.root);
   }
 
   async start() {
@@ -43,6 +47,7 @@ class AgentkodexDaemon {
       this.server.once('error', reject);
       this.server.listen(this.socketPath, () => {
         this.server.off('error', reject);
+        hardenSocket(this.socketPath);
         resolve();
       });
     });
@@ -87,7 +92,8 @@ class AgentkodexDaemon {
         const response = await this.handleRequest(request);
         socket.write(`${JSON.stringify({ ok: true, response })}\n`);
       } catch (error) {
-        socket.write(`${JSON.stringify({ ok: false, error: error && error.stack ? error.stack : String(error) })}\n`);
+        this.log(`request error ${redactSecrets(error && error.stack ? error.stack : String(error))}`);
+        socket.write(`${JSON.stringify({ ok: false, error: sanitizeError(error) })}\n`);
       } finally {
         socket.end();
       }
@@ -95,6 +101,7 @@ class AgentkodexDaemon {
   }
 
   async handleRequest(request) {
+    assertDaemonToken(this.root, request);
     const type = request.type;
     if (type === 'ping') return { pid: process.pid, root: this.root, socketPath: this.socketPath, sessions: this.children.size };
     if (type === 'stop') return this.stop();
@@ -116,7 +123,16 @@ class AgentkodexDaemon {
     const cwd = path.resolve(input.cwd || this.root);
     const mode = input.mode || 'supervised';
     const yes = Boolean(input.yes || input.autoApprove);
-    const policy = policyAllows(command, { mode, yes, agentLaunch: Boolean(input.configuredAgent) });
+    const policy = authorizeCommand(command, {
+      root: this.root,
+      mode,
+      yes,
+      agentLaunch: Boolean(input.trustedAgentLaunch),
+      intent: input.task || command,
+      holder: input.runId || input.sessionId || 'agentkodex-daemon',
+      agent: input.agent,
+      adapterKind: input.adapterKind,
+    });
 
     const session = createSession(this.root, {
       agent: input.agent || 'custom',
@@ -135,8 +151,9 @@ class AgentkodexDaemon {
       pendingStart: policy.allowed ? null : { ...input, cwd, command, forceApproved: true },
     });
 
-    appendSessionEvent(session, { type: 'session_created', command, cwd, agent: session.agent, mode, policy });
-    appendText(session.files.policy, `${new Date().toISOString()} ${JSON.stringify({ command, policy })}\n`);
+    const displayCommand = redactSecrets(command);
+    appendSessionEvent(session, { type: 'session_created', command: displayCommand, cwd, agent: session.agent, mode, policy });
+    appendText(session.files.policy, `${new Date().toISOString()} ${JSON.stringify({ command: displayCommand, policy })}\n`);
 
     if (!policy.allowed) {
       const approval = createApproval(this.root, {
@@ -151,7 +168,7 @@ class AgentkodexDaemon {
         fingerprint: `command:${session.id}:${command}`,
       });
       appendSessionEvent(session, { type: 'approval_created', approvalId: approval.id, approval });
-      appendTranscript(session, `\n$ ${command}\n[AWAITING APPROVAL] ${policy.reason}\nApproval: ${approval.id}\n`);
+      appendTranscript(session, `\n$ ${displayCommand}\n[AWAITING APPROVAL] ${policy.reason}\nApproval: ${approval.id}\n`);
       this.log(`session ${session.id} awaiting command approval ${approval.id}`);
       return { session: readSession(this.root, session.id), approval };
     }
@@ -162,6 +179,7 @@ class AgentkodexDaemon {
 
   spawnForSession(session, input = {}) {
     const command = session.command;
+    const displayCommand = redactSecrets(command);
     const cwd = session.cwd || this.root;
     const env = { ...process.env, ...(input.env || {}) };
     const usePty = Boolean(input.pty || input.usePty) && process.platform !== 'win32';
@@ -187,10 +205,10 @@ class AgentkodexDaemon {
       pendingStart: null,
     });
 
-    appendText(next.files.commands, `${JSON.stringify({ type: 'start', command, cwd, pid: child.pid, startedAt, mode: next.mode })}\n`);
-    appendTranscript(next, `\n$ ${command}\n`);
-    appendSessionEvent(next, { type: 'process_started', pid: child.pid, command, cwd, pty: usePty });
-    this.log(`session ${session.id} started pid=${child.pid} command=${command}`);
+    appendText(next.files.commands, `${JSON.stringify({ type: 'start', command: displayCommand, cwd, pid: child.pid, startedAt, mode: next.mode })}\n`);
+    appendTranscript(next, `\n$ ${displayCommand}\n`);
+    appendSessionEvent(next, { type: 'process_started', pid: child.pid, command: displayCommand, cwd, pty: usePty });
+    this.log(`session ${session.id} started pid=${child.pid} command=${displayCommand}`);
 
     if (input.initialInput) {
       let initialText = String(input.initialInput);
@@ -255,7 +273,7 @@ class AgentkodexDaemon {
       this.buffers.delete(session.id);
       const endedAt = new Date().toISOString();
       const finalStatus = exitCode === 0 ? 'exited' : 'failed';
-      appendText(current.files.commands, `${JSON.stringify({ type: 'finish', command, cwd, pid: child.pid, exitCode, signal, endedAt })}\n`);
+      appendText(current.files.commands, `${JSON.stringify({ type: 'finish', command: displayCommand, cwd, pid: child.pid, exitCode, signal, endedAt })}\n`);
       appendTranscript(current, `\n[exit ${exitCode}${signal ? ` signal ${signal}` : ''}]\n`);
       appendSessionEvent(current, { type: 'process_exited', exitCode, signal });
       updateSession(this.root, session.id, { status: finalStatus, state: exitCode === 0 ? 'completed' : 'failed', exitCode, signal, endedAt });
@@ -295,8 +313,9 @@ class AgentkodexDaemon {
     let text = String(input || '');
     if (!options.raw && !text.endsWith('\n')) text += '\n';
     child.stdin.write(text);
-    appendSessionEvent(session, { type: 'input_sent', source: 'user', text: options.redact ? '[REDACTED]' : text });
-    appendTranscript(session, `\n[agentkodex input] ${options.redact ? '[REDACTED]' : text}`);
+    const displayText = options.redact ? '[REDACTED]' : redactSecrets(text);
+    appendSessionEvent(session, { type: 'input_sent', source: 'user', text: displayText });
+    appendTranscript(session, `\n[agentkodex input] ${displayText}`);
     updateSession(this.root, session.id, { state: 'agent_running' });
     return { session: readSession(this.root, session.id), bytes: text.length };
   }

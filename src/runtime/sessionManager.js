@@ -10,12 +10,14 @@ const { getAgent, detectAgent, buildAgentCommand } = require('../agents');
 const { createTaskBrief, createPlan, createMissionPrompt, createReleaseNotes } = require('../prompts');
 const { createSession, getSession, listSessions, patchSession, resolveSessionId, readApprovals, isPidAlive } = require('./sessionStore');
 const { readText, writeJson, writeText, exists, ensureDir, hashString, slugify } = require('../utils');
-const { policyAllows } = require('../policy');
+const { authorizeCommand } = require('../authorization');
 const { runCommand } = require('../sessionRunner');
 const { scanDiff, renderSecurityReport } = require('../security');
 const { createQaReport, renderQaReport, decideFinalStatus } = require('../run');
 const { summarizeCommandResult, tail } = require('../commandResult');
 const { spawnSync } = require('child_process');
+const { withSessionToken } = require('./controlToken');
+const { runLintguardGate } = require('../lintguard/gate');
 
 async function startAgentSession(options) {
   const root = path.resolve(options.root || process.cwd());
@@ -50,8 +52,18 @@ async function startAgentSession(options) {
   writeJson(path.join(run.dir, 'selected-gates.json'), selectedCommands);
 
   const { command, detection, stdin } = await resolveSessionCommand({ root, runDir: run.dir, config, agentId, task, missionPrompt, promptFile, options });
-  const isConfiguredAgentLaunch = !options.command && !['local', 'shell'].includes(agentId);
-  const policy = policyAllows(command, { mode, yes, agentLaunch: isConfiguredAgentLaunch });
+  const trustedAgentLaunch = Boolean(detection.trustedLaunch && !options.command);
+  const policy = authorizeCommand(command, {
+    root,
+    mode,
+    yes,
+    agentLaunch: trustedAgentLaunch,
+    intent: task,
+    holder: run.id,
+    agent: agentId,
+    adapterKind: detection.kind || detection.adapterKind,
+    config,
+  });
   writeJson(path.join(run.dir, 'session-command.json'), { agent: agentId, command, detection, stdin, policy });
 
   if (!policy.allowed) {
@@ -138,7 +150,7 @@ function requestSession(root, idOrLast, payload, options = {}) {
     }, timeoutMs);
     timer.unref();
     socket.setEncoding('utf8');
-    socket.on('connect', () => socket.write(`${JSON.stringify(payload)}\n`));
+    socket.on('connect', () => socket.write(`${JSON.stringify(withSessionToken(session, payload))}\n`));
     socket.on('data', (chunk) => {
       buffer += chunk;
       if (!buffer.includes('\n')) return;
@@ -224,6 +236,10 @@ async function finalizeSession(root, idOrLast = 'last', options = {}) {
   ensureDir(gateOutputDir);
   for (let index = 0; index < selectedCommands.length; index += 1) {
     const gateCommand = selectedCommands[index];
+    if (gateCommand.gate === 'lintguard') {
+      gateResults.push(await runLintguardGate(root, gateOutputDir, { mode, yes, timeoutMs }));
+      continue;
+    }
     if (gateCommand.skipped) {
       gateResults.push({ gate: gateCommand.gate, skipped: true, reason: gateCommand.reason });
       continue;

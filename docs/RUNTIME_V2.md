@@ -25,6 +25,7 @@ agentkodex session start --agent shell --command "npm test" --mode sandbox_auto 
 agentkodex session status last
 agentkodex session replay last
 agentkodex session finalize last --gates test,build --yes
+agentkodex session finalize last --gates quality --yes
 agentkodex audit-bundle last
 ```
 
@@ -68,11 +69,28 @@ agentkodex approvals deny last
 
 The approve/deny command sends the configured response into the live session.
 
+## Security controls
+
+Runtime v2 control sockets are placed under `.agentkodex/runtime/`, the runtime directory is tightened to `0700`, and socket files are chmodded to `0600` on Unix-like systems. Daemon and per-session control requests require local token files, so arbitrary same-user socket writes are rejected.
+
+When Agentguard is available through `AGENTGUARD_SOURCE` or `.agentkodex/config.json`, Runtime v2 command launch follows:
+
+```text
+Agentkodex Node runtime
+  -> Agentguard JSON bridge
+  -> signed capability / approval decision
+  -> process spawn only when authorized
+```
+
+Agentguard evidence is written to `.agentkodex/runtime/agentguard-audit.jsonl`, and the default capability policy is created at `.agentkodex/agentguard-policy.yaml`.
+
 ## Cockpit workflow
 
 ```bash
 agentkodex cockpit
 ```
+
+Cockpit binds to `127.0.0.1` by default. API routes require the token stored at `.agentkodex/runtime/cockpit.token`; use `--show-token` only when you need to display it. Binding to `0.0.0.0` requires `--unsafe-public`.
 
 The Cockpit provides a local browser UI for:
 
@@ -125,6 +143,7 @@ Runtime v2 is reused by higher-level orchestration:
 - `agentkodex tournament` runs the same task in isolated workspaces and scores real gate/session outcomes.
 - `agentkodex swarm` starts phase-specific Runtime v2 sessions for builder/reviewer/QA/security/release flows.
 - `agentkodex route` uses persisted scorecards from real runs and returns `insufficient history` when no data exists.
+- `agentkodex quality check` and `--gates quality` block completion when lint/type/test/LOC/architecture checks fail.
 
 ## Design notes
 

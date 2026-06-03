@@ -7,10 +7,11 @@ const { spawn } = require('child_process');
 const { ensureDir, readText } = require('../utils');
 const { ensureKodex } = require('../kodexStore');
 const { socketPathForRoot, daemonLogPath, readDaemonInfo, writeDaemonInfo, getSession } = require('./sessionStore');
+const { withDaemonToken } = require('./daemonAuth');
 
 function request(root, payload, options = {}) {
   const socketPath = socketPathForRoot(root);
-  return requestSocket(socketPath, payload, options).then((value) => {
+  return requestSocket(socketPath, withDaemonToken(root, payload), options).then((value) => {
     if (value && value.ok === false) throw new Error(value.error || 'Agentkodex daemon request failed');
     return value && Object.prototype.hasOwnProperty.call(value, 'response') ? value.response : value;
   });
@@ -98,7 +99,7 @@ function startDaemonProcess(root) {
       cwd: root,
       detached: true,
       stdio: ['ignore', out, err],
-      env: { ...process.env, AGENTKODEX_DAEMON: '1' },
+    env: { ...process.env, AGENTKODEX_DAEMON: '1' },
     });
     child.once('error', reject);
     child.unref();

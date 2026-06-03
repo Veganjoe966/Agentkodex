@@ -11,6 +11,8 @@ const { getAgent, detectAgent, buildAgentCommand } = require('./agents');
 const { runCommand } = require('./sessionRunner');
 const { scanDiff, renderSecurityReport } = require('./security');
 const { summarizeCommandResult } = require('./commandResult');
+const { runLintguardGate } = require('./lintguard/gate');
+const { runQualityGateAsGate } = require('./gates/qualityGate');
 
 async function runTask(options) {
   const root = path.resolve(options.root || process.cwd());
@@ -82,6 +84,14 @@ async function runTask(options) {
   ensureDir(gateOutputDir);
   for (let index = 0; index < selectedCommands.length; index += 1) {
     const gateCommand = selectedCommands[index];
+    if (gateCommand.gate === 'lintguard') {
+      gateResults.push(await runLintguardGate(root, gateOutputDir, { mode, yes, timeoutMs }));
+      continue;
+    }
+    if (gateCommand.gate === 'quality') {
+      gateResults.push(await runQualityGateAsGate(root, gateOutputDir, { mode, yes, timeoutMs }));
+      continue;
+    }
     if (gateCommand.skipped) {
       const item = { gate: gateCommand.gate, skipped: true, reason: gateCommand.reason };
       gateResults.push(item);
@@ -224,6 +234,12 @@ async function executeAgentPhase(context) {
     closeStdin: true,
     mode: context.mode,
     yes: context.yes,
+    agentLaunch: Boolean(detection.trustedLaunch),
+    agent: context.agentId,
+    adapterKind: detection.kind || detection.adapterKind,
+    intent: context.task,
+    holder: path.basename(context.runDir),
+    config: context.config,
     timeoutMs: context.timeoutMs,
     echo: context.echo,
     pty: context.pty,

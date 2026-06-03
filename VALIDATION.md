@@ -6,14 +6,15 @@ Package: `agentkodex@0.3.0`
 
 ## Summary
 
-Local validation passed for the production CLI harness, Runtime v2 sessions, audit bundle, intelligence layer, routing, scorecards, tournaments, swarm execution, policy, discovery, gates, and Cockpit snapshot mode.
+Local validation passed for the production CLI harness, Runtime v2 sessions, audit bundle, Agentguard authorization bridge, Agentkodex quality gate, Lintguard adapter gate, intelligence layer, routing, scorecards, tournaments, swarm execution, policy, discovery, gates, and Cockpit snapshot mode.
 
 ## Commands Run
 
 Syntax check:
 
 ```bash
-find bin src tests -name '*.js' -print0 | xargs -0 -n1 node --check
+npm run lint
+npm run typecheck
 ```
 
 Result: passed.
@@ -27,11 +28,37 @@ npm test
 Result:
 
 ```text
-1..29
-# tests 29
-# pass 29
+1..47
+# tests 47
+# pass 47
 # fail 0
 ```
+
+Agentkodex quality gate:
+
+```bash
+npm run quality:gate
+```
+
+Result: passed. The JSON output reported `ok: true` and successful `eslint`, `typecheck`, `tests`, `loc`, and `architecture` checks. Command output was captured under `.agentkodex/quality-gate/`.
+
+Agentguard bridge smoke:
+
+```bash
+python3 -m py_compile /root/agentguard/Agentguard/agentguard/bridge.py
+npm test
+```
+
+Result: the Agentguard bridge test authorized a safe command, required approval for a risky package install, and minted a signed explicit-approval capability after `yes`.
+
+Lintguard adapter gate smoke:
+
+```bash
+npm run lintguard:check
+agentkodex gates run --gates lintguard --quiet
+```
+
+Result: Lintguard emitted machine-readable JSON. Focused tests verified sidecar token rejection, valid-token checks, clean local passes, and blocking local lint failures.
 
 CLI boot:
 
@@ -120,6 +147,11 @@ Result: wrote `.agentkodex/swarms/<id>/manifest.json` and `summary.md`; the buil
 
 - discovery: Java, .NET, e2e, Taskfile
 - policy: observe-mode read-only enforcement, manual approval patterns, redaction
+- Agentguard: local JSON bridge, signed capability evidence, approval-required command gating
+- Agentkodex quality gate: CLI/API/CI entrypoints, real lint/type/test failures, LOC budget, forbidden imports, completion blocking, JSON contract
+- Lintguard: sidecar/local JSON gate, token-auth tests, lint/typecheck completion blocking
+- control plane: Cockpit token auth, public-host guard, daemon socket token rejection, socket permissions
+- LOC guard: source files fail tests if they exceed the 400-line hard cap
 - gates: per-gate output capture and gate report
 - quickstart: friendly first-run setup and reusable `.agentkodex/QUICKSTART.md`
 - audit bundle: manifest, summary, missing list, redaction

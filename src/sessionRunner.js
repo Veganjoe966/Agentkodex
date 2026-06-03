@@ -5,7 +5,8 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const { appendText, ensureDir, shellQuote, writeText } = require('./utils');
-const { policyAllows, redactSecrets } = require('./policy');
+const { redactSecrets } = require('./policy');
+const { authorizeCommand } = require('./authorization');
 
 function commandExists(commandName) {
   return new Promise((resolve) => {
@@ -44,11 +45,21 @@ async function runCommand(command, options = {}) {
   ensureDir(logDir);
   if (outputFile) writeText(outputFile, '');
 
-  const policy = policyAllows(command, { mode, yes });
-  appendText(policyFile, `${new Date().toISOString()} ${JSON.stringify({ command, policy })}\n`);
+  const policy = authorizeCommand(command, {
+    root: cwd,
+    mode,
+    yes,
+    intent: options.intent || command,
+    holder: options.holder || 'agentkodex-command',
+    agent: options.agent,
+    adapterKind: options.adapterKind,
+    config: options.config,
+  });
+  const displayCommand = redactSecrets(command);
+  appendText(policyFile, `${new Date().toISOString()} ${JSON.stringify({ command: displayCommand, policy })}\n`);
   if (!policy.allowed) {
     const result = {
-      command,
+      command: displayCommand,
       cwd,
       startedAt: new Date().toISOString(),
       endedAt: new Date().toISOString(),
@@ -62,17 +73,17 @@ async function runCommand(command, options = {}) {
       durationMs: 0,
     };
     appendText(commandsFile, `${JSON.stringify(safeCommandRecord(result))}\n`);
-    appendText(transcriptFile, `\n$ ${command}\n[POLICY] ${policy.reason}\n`);
-    if (outputFile) appendText(outputFile, `$ ${command}\n[POLICY] ${policy.reason}\n`);
-    if (echo) console.error(`[policy] ${policy.reason}: ${command}`);
+    appendText(transcriptFile, `\n$ ${displayCommand}\n[POLICY] ${policy.reason}\n`);
+    if (outputFile) appendText(outputFile, `$ ${displayCommand}\n[POLICY] ${policy.reason}\n`);
+    if (echo) console.error(`[policy] ${policy.reason}: ${displayCommand}`);
     return result;
   }
 
   const startedAt = new Date();
-  appendText(commandsFile, `${JSON.stringify({ type: 'start', command, cwd, startedAt: startedAt.toISOString(), mode })}\n`);
-  appendText(transcriptFile, `\n$ ${command}\n`);
-  if (outputFile) appendText(outputFile, `$ ${command}\n`);
-  if (echo) console.log(`$ ${command}`);
+  appendText(commandsFile, `${JSON.stringify({ type: 'start', command: displayCommand, cwd, startedAt: startedAt.toISOString(), mode })}\n`);
+  appendText(transcriptFile, `\n$ ${displayCommand}\n`);
+  if (outputFile) appendText(outputFile, `$ ${displayCommand}\n`);
+  if (echo) console.log(`$ ${displayCommand}`);
 
   return new Promise((resolve) => {
     let stdout = '';
@@ -126,7 +137,7 @@ async function runCommand(command, options = {}) {
       clearTimeout(timer);
       const endedAt = new Date();
       const result = {
-        command,
+        command: displayCommand,
         cwd,
         startedAt: startedAt.toISOString(),
         endedAt: endedAt.toISOString(),
@@ -158,7 +169,7 @@ function tail(value, max = 4000) {
 function safeCommandRecord(result) {
   return {
     type: 'finish',
-    command: result.command,
+    command: redactSecrets(result.command),
     cwd: result.cwd,
     startedAt: result.startedAt,
     endedAt: result.endedAt,

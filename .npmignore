@@ -1,6 +1,7 @@
 .agentkodex/
 coverage/
 node_modules/
+tests/
 *.tgz
 *.zip
 *.tar.gz

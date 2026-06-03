@@ -4,11 +4,12 @@ const os = require('os');
 const path = require('path');
 const { ensureDir, readJson, writeJson, timestampId, hashString } = require('../utils');
 const { ensureKodex, kodexPath } = require('../kodexStore');
+const { secureDir } = require('../security/controlPlane');
 
 function runtimeDir(root) {
   ensureKodex(root);
   const dir = kodexPath(root, 'runtime');
-  ensureDir(dir);
+  secureDir(dir);
   return dir;
 }
 
@@ -28,13 +29,13 @@ function sessionDir(root, sessionId) {
 function socketPathForRoot(root) {
   const key = hashString(path.resolve(root), 20);
   if (process.platform === 'win32') return `\\\\.\\pipe\\agentkodex-${key}`;
-  return path.join(os.tmpdir(), `agentkodex-${key}.sock`);
+  return path.join(runtimeDir(root), `agentkodex-${key}.sock`);
 }
 
 function makeSocketPath(root, sessionId) {
   const key = hashString(path.resolve(root), 20);
   if (process.platform === 'win32') return `\\\\.\\pipe\\agentkodex-${key}-${sessionId}`;
-  return path.join(os.tmpdir(), `agentkodex-${key}-${sessionId}.sock`);
+  return path.join(runtimeDir(root), `agentkodex-${hashString(`${key}:${sessionId}`, 24)}.sock`);
 }
 
 function daemonInfoPath(root) {
@@ -80,6 +81,7 @@ function sessionFiles(root, id, runDir = null) {
     input: path.join(base, 'input.log'),
     workerLog: path.join(dir, 'worker.log'),
     supervisor: path.join(dir, 'supervisor.log'),
+    controlToken: path.join(dir, 'control.token'),
   };
 }
 

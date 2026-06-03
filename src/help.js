@@ -13,10 +13,12 @@ Usage:
   agentkodex suggest "task"
   agentkodex run [options] "task"
   agentkodex gates run --gates lint,test,build
+  agentkodex quality check [--json] [--max-file-lines 400]
+  agentkodex lintguard check [--local|--url http://127.0.0.1:8001] [--json]
   agentkodex run --runtime cockpit [options] "task"
   agentkodex swarm --builder shell --reviewer shell --qa shell "task"
   agentkodex daemon start|stop|status|logs
-  agentkodex cockpit [--port 3919] [--host 127.0.0.1] [--once|--json]
+  agentkodex cockpit [--port 3919] [--host 127.0.0.1] [--once|--json] [--show-token]
   agentkodex session start|list|status|send|attach|interrupt|kill|replay|gates|finalize
   agentkodex approvals list|approve|deny
   agentkodex approve <approval-id> / deny <approval-id>
@@ -44,6 +46,8 @@ Run options:
   --pty                 wrap command with script(1) pseudo-terminal when available
   --wait                with session start, wait for exit and auto-finalize
   --no-finalize         with session start --wait, skip automatic gate finalization
+  --show-token          print Cockpit bearer token when starting the local UI
+  --unsafe-public       allow Cockpit to bind to a non-loopback host
   --quiet               reduce live output
   --cwd, --repo <path>  project root
 
@@ -55,6 +59,8 @@ Examples:
   agentkodex quickstart
   agentkodex route "large refactor"
   agentkodex agents scorecards
+  agentkodex quality check
+  agentkodex lintguard check --local
   agentkodex intelligence rebuild
   agentkodex tournament --agents shell,custom --task "Verify current repo" --gates test
   agentkodex swarm --builder shell --reviewer shell --qa shell "Review validation"

@@ -32,6 +32,7 @@ async function gatesCommand(argv) {
     mode: stringFlag(flags, 'mode', 'supervised'),
     yes: booleanFlag(flags, 'yes') || booleanFlag(flags, 'y'),
     timeoutMs: Number(stringFlag(flags, 'timeoutMs', stringFlag(flags, 'timeout-ms', '1800000'))),
+    lintguardUrl: stringFlag(flags, 'lintguardUrl', ''),
     echo: !booleanFlag(flags, 'quiet'),
     pty: booleanFlag(flags, 'pty'),
     writeReports: true,

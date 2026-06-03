@@ -20,6 +20,9 @@ const { routeCommand } = require('./router/command');
 const { scorecardsCommand } = require('./scorecards/command');
 const { swarmCommand } = require('./swarm/command');
 const { quickstartCommand } = require('./onboarding/quickstart');
+const { findAgentguardSource } = require('./agentguard/bridge');
+const { lintguardCommand } = require('./lintguard/command');
+const { qualityCommand } = require('./gates/qualityCommand');
 
 async function main(argv) {
   const [command = 'help', ...rest] = argv;
@@ -35,6 +38,10 @@ async function main(argv) {
       return runCommand(rest);
     case 'gates':
       return gatesCommand(rest);
+    case 'lintguard':
+      return lintguardCommand(rest);
+    case 'quality':
+      return qualityCommand(rest);
     case 'audit-bundle':
       return auditBundleCommand(rest);
     case 'intelligence':
@@ -247,12 +254,15 @@ async function agentsCommand(argv) {
 
 async function policyCommand(argv) {
   const { classifyCommand, policyAllows } = require('./policy');
+  const { authorizeCommand } = require('./authorization');
   const { flags, positionals } = parseArgs(argv);
+  const root = cwdFromFlags(flags);
   const command = positionals.join(' ') || stringFlag(flags, 'command', '');
   if (!command) throw new Error('Missing command to classify.');
   const classification = classifyCommand(command);
   const decision = policyAllows(command, { mode: stringFlag(flags, 'mode', 'supervised'), yes: booleanFlag(flags, 'yes') });
-  console.log(JSON.stringify({ command, classification, decision }, null, 2));
+  const authorization = authorizeCommand(command, { root, mode: stringFlag(flags, 'mode', 'supervised'), yes: booleanFlag(flags, 'yes') });
+  console.log(JSON.stringify({ command, classification, decision, authorization }, null, 2));
 }
 
 async function suggestCommand(argv) {
@@ -316,6 +326,8 @@ async function doctorCommand(argv) {
   console.log(`sessions: ${sessions.length} total, ${live.length} live`);
   const daemon = await pingDaemon(root);
   console.log(`compat daemon: ${daemon ? `running pid=${daemon.pid}` : 'not running/not required'}`);
+  const agSource = findAgentguardSource(root, config.agentguard || {});
+  console.log(`agentguard: ${agSource ? `available (${agSource})` : config.agentguard?.required ? 'required but missing' : 'not available; JS policy fallback'}`);
   console.log('agents:');
   for (const id of Object.keys(config.agents || {})) {
     const detection = await detectAgent(config, id);

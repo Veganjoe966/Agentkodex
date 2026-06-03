@@ -1,5 +1,7 @@
 'use strict';
 
+const { redactSecrets } = require('./security/redaction');
+
 const BLOCKED_PATTERNS = [
   /\brm\s+-rf\s+\//i,
   /\brm\s+-rf\s+~\b/i,
@@ -94,14 +96,21 @@ function policyAllows(command, options = {}) {
     return { allowed: true, requiresApproval: false, classification, reason: 'Allowed as coding-agent CLI launch' };
   }
 
-  if (classification.risk === 'approval_required' || classification.risk === 'unknown') {
+  if (classification.risk === 'approval_required') {
     if (classification.category === 'manual' && !yes) {
       return { allowed: false, requiresApproval: true, classification, reason: 'Manual approval required even in auto modes. Re-run with --yes after reviewing the command.' };
     }
-    if (mode === 'trusted_auto' || mode === 'sandbox_auto' || yes) {
+    if (yes) {
       return { allowed: true, requiresApproval: false, classification, reason: 'Approved by mode or --yes' };
     }
-    return { allowed: false, requiresApproval: true, classification, reason: 'Command requires approval. Re-run with --yes or trusted/sandbox mode.' };
+    return { allowed: false, requiresApproval: true, classification, reason: 'Command requires explicit approval. Re-run with --yes after reviewing the command.' };
+  }
+
+  if (classification.risk === 'unknown') {
+    if (mode === 'trusted_auto' || mode === 'sandbox_auto' || yes) {
+      return { allowed: true, requiresApproval: false, classification, reason: 'Unknown command allowed by mode or --yes' };
+    }
+    return { allowed: false, requiresApproval: true, classification, reason: 'Unknown command requires approval. Re-run with --yes or trusted/sandbox mode.' };
   }
 
   return { allowed: true, requiresApproval: false, classification, reason: 'Allowed by policy' };
@@ -113,18 +122,6 @@ function normalizeMode(mode) {
 
 function isReadOnlyCommand(command) {
   return READONLY_PATTERNS.some((pattern) => pattern.test(String(command || '').trim()));
-}
-
-function redactSecrets(text) {
-  if (!text) return '';
-  return String(text)
-    .replace(/(sk-[A-Za-z0-9_-]{12,})/g, '[REDACTED_OPENAI_STYLE_KEY]')
-    .replace(/(ghp_[A-Za-z0-9_]{20,})/g, '[REDACTED_GITHUB_TOKEN]')
-    .replace(/(xox[baprs]-[A-Za-z0-9-]{20,})/g, '[REDACTED_SLACK_TOKEN]')
-    .replace(/(Authorization:\s*Bearer\s+)[A-Za-z0-9._-]+/gi, '$1[REDACTED]')
-    .replace(/((?:api[_-]?key|secret|token|password)["']?\s*[:=]\s*["'])[^\s"']+(["'])/gi, '$1[REDACTED]$2')
-    .replace(/((?:AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|DATABASE_URL|API_KEY|SECRET|TOKEN|PASSWORD)=)[^\s]+/gi, '$1[REDACTED]')
-    .replace(/-----BEGIN [A-Z ]+PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+PRIVATE KEY-----/g, '[REDACTED_PRIVATE_KEY]');
 }
 
 module.exports = {
