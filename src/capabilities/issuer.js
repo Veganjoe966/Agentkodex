@@ -10,6 +10,7 @@ const { activeSigningKey, signingKey } = require('./keys');
 const { writeAuditEvidence } = require('../audit/evidence');
 const { loadPolicyConfig } = require('../policy/config');
 const { isSubpath } = require('../utils');
+const { normalizeCapabilityPath } = require('./pathScope');
 
 function issueCapability(root, input = {}) {
   ensureKodex(root);
@@ -50,12 +51,11 @@ function issueCapability(root, input = {}) {
 }
 
 function normalizeAllowedPaths(root, paths, policy) {
-  const allowed = normalizeList(paths);
-  const scopes = normalizeList(policy.pathScopes).map((item) => path.resolve(root, item));
+  const allowed = normalizeList(paths).map(normalizeCapabilityPath);
+  const scopes = normalizeList(policy.pathScopes).map((item) => normalizeCapabilityPath(path.resolve(root, item)));
   if (!scopes.length) return allowed;
   for (const item of allowed) {
-    const resolved = path.resolve(item);
-    if (!scopes.some((scope) => isSubpath(scope, resolved))) throw new Error(`Capability path is outside configured policy scope: ${item}`);
+    if (!scopes.some((scope) => isSubpath(scope, item))) throw new Error(`Capability path is outside configured policy scope: ${item}`);
   }
   return allowed;
 }

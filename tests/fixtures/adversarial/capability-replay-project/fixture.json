@@ -1,0 +1,13 @@
+{
+  "name": "capability-replay-project",
+  "attacks": [
+    "expired capability",
+    "wrong sessionId",
+    "wrong agentId",
+    "wrong phase",
+    "wrong action",
+    "revoked capability",
+    "retired key"
+  ],
+  "expected": "all denied"
+}

@@ -67,7 +67,13 @@ function scoreMetrics(metrics, strategy = 'balanced') {
   const speedPenalty = metrics.durationMs ? Math.min(15, metrics.durationMs / 60000) : 0;
   const diffPenalty = metrics.diffSizeBytes ? Math.min(10, metrics.diffSizeBytes / 100000) : 0;
   const approvalPenalty = Number(metrics.approvalCount || 0) * 2;
-  const balanced = completionScore + gateScore - speedPenalty - diffPenalty - approvalPenalty;
+  const governancePenalty = Number(metrics.securityDeniedCount || 0) * 12 +
+    Number(metrics.failedCapabilityCount || 0) * 10 +
+    Number(metrics.unsafeActionAttemptCount || 0) * 8 +
+    Number(metrics.qualityViolationCount || 0) * 2 +
+    (metrics.qualityGateOk === false ? 12 : 0) +
+    (metrics.completionBlocked ? 15 : 0);
+  const balanced = completionScore + gateScore - speedPenalty - diffPenalty - approvalPenalty - governancePenalty;
   if (strategy === 'completion') return completionScore + gateScore;
   if (strategy === 'gates') return gateScore + (metrics.completion ? 10 : 0);
   if (strategy === 'speed') return (metrics.completion ? 50 : 0) - speedPenalty;
@@ -77,7 +83,16 @@ function scoreMetrics(metrics, strategy = 'balanced') {
 function selectWinner(results, strategy = 'balanced') {
   const scored = results.map((item) => ({ ...item, score: { ...(item.score || {}), total: scoreMetrics(item.metrics || item, strategy) } }));
   scored.sort((a, b) => b.score.total - a.score.total || String(a.agent).localeCompare(String(b.agent)));
-  return { winner: scored[0]?.agent || null, results: scored };
+  const eligible = scored.find((item) => isEligibleWinner(item.metrics || item));
+  return { winner: eligible?.agent || null, results: scored };
+}
+
+function isEligibleWinner(metrics = {}) {
+  return Boolean(metrics.completion) &&
+    !metrics.completionBlocked &&
+    Number(metrics.securityDeniedCount || 0) === 0 &&
+    Number(metrics.failedCapabilityCount || 0) === 0 &&
+    metrics.qualityGateOk !== false;
 }
 
 function durationMs(startedAt, endedAt) {

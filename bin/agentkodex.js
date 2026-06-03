@@ -2,8 +2,9 @@
 'use strict';
 
 const { main } = require('../src/cli');
+const { sanitizeError } = require('../src/security/controlPlane');
 
 main(process.argv.slice(2)).catch((error) => {
-  console.error(error && error.stack ? error.stack : String(error));
+  console.error(`Error: ${sanitizeError(error)}`);
   process.exitCode = 1;
 });

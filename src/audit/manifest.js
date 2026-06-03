@@ -3,6 +3,8 @@
 const path = require('path');
 const crypto = require('crypto');
 const { writeJson, writeText } = require('../utils');
+const { activeSigningKey } = require('../capabilities/keys');
+const { sign } = require('../capabilities/issuer');
 
 function createManifest(input) {
   const governance = input.governance || defaultGovernance();
@@ -36,6 +38,7 @@ function createManifest(input) {
       markerCount: 0,
       notes: ['Artifact text is passed through Agentkodex secret redaction before writing.'],
     },
+    bundleSignature: null,
   };
 }
 
@@ -68,11 +71,20 @@ function recordSkipped(manifest, role, source, reason) {
 
 function writeManifest(bundleDir, manifest) {
   manifest.bundleHash = computeBundleHash(manifest);
+  manifest.bundleSignature = signBundleManifest(manifest);
   const manifestPath = path.join(bundleDir, 'manifest.json');
   writeJson(manifestPath, manifest);
   writeText(path.join(bundleDir, 'summary.md'), renderSummary(manifest));
   writeJson(path.join(bundleDir, 'redaction-report.json'), manifest.redaction);
   return manifestPath;
+}
+
+function signBundleManifest(manifest) {
+  const root = manifest.root;
+  if (!root) return null;
+  const key = activeSigningKey(root);
+  const payload = { kind: 'audit_bundle', algorithm: 'ed25519', keyId: key.keyId, bundleHash: manifest.bundleHash };
+  return { algorithm: 'ed25519', keyId: key.keyId, signature: sign(root, payload) };
 }
 
 function computeBundleHash(manifest) {

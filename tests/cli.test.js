@@ -53,3 +53,12 @@ test('cli policy check json emits machine-readable output', () => {
   assert.equal(parsed.ok, true);
   assert.equal(parsed.command, 'npm run test');
 });
+
+test('cli errors are sanitized without stack traces', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ak-cli-error-'));
+  const result = run(['audit-bundle', 'last', '--cwd', dir]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /No Agentkodex run or session found/);
+  assert.doesNotMatch(result.stderr, /\.js:\d+:\d+/);
+  assert.doesNotMatch(result.stderr, /at\s+\S+/);
+});

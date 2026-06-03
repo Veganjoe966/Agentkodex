@@ -1,10 +1,15 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
+const { kodexPath } = require('../kodexStore');
+const { readJson } = require('../utils');
 const { loadScorecards, inferTaskCategory } = require('../scorecards/store');
 
 function routeTask(root, task) {
   const scorecards = loadScorecards(root);
-  const cards = Object.values(scorecards.agents || {}).filter((card) => card.runs > 0);
+  const trustedAgents = agentsWithRunHistory(root);
+  const cards = Object.values(scorecards.agents || {}).filter((card) => card.runs > 0 && trustedAgents.has(card.agent));
   const category = inferTaskCategory(task);
   if (!cards.length) {
     return { task, category, selected: null, reason: 'insufficient history', candidates: [] };
@@ -39,6 +44,17 @@ function routeTask(root, task) {
       architectureViolationCount: item.card.architectureViolationCount,
     })),
   };
+}
+
+function agentsWithRunHistory(root) {
+  const agents = new Set();
+  const runsDir = kodexPath(root, 'runs');
+  if (!fs.existsSync(runsDir)) return agents;
+  for (const id of fs.readdirSync(runsDir)) {
+    const status = readJson(path.join(runsDir, id, 'status.json'), {});
+    if (status.agent) agents.add(status.agent);
+  }
+  return agents;
 }
 
 function routeScore(card, category) {
@@ -86,4 +102,5 @@ function renderReason(card, category) {
 
 module.exports = {
   routeTask,
+  agentsWithRunHistory,
 };

@@ -8,6 +8,7 @@ function writeAuditEvidence(root, event = {}, options = {}) {
   const record = redactObject({
     createdAt: new Date().toISOString(),
     source: 'agentkodex',
+    runDir: options.runDir || event.runDir || undefined,
     ...event,
   });
   const line = `${JSON.stringify(record)}\n`;

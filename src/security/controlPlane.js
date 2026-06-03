@@ -50,7 +50,7 @@ function constantTimeMatch(actual, expected) {
 function tokenFromHttpRequest(req, url) {
   const auth = String(req.headers.authorization || '');
   const bearer = auth.match(/^Bearer\s+(.+)$/i);
-  return (bearer && bearer[1]) || req.headers['x-agentkodex-token'] || url.searchParams.get('token') || '';
+  return (bearer && bearer[1]) || req.headers['x-agentkodex-token'] || '';
 }
 
 function requireHttpToken(req, url, expected) {
@@ -59,17 +59,19 @@ function requireHttpToken(req, url, expected) {
 }
 
 function rejectBadOrigin(req, expectedHost) {
-  if (!isMutating(req.method)) return null;
   const origin = req.headers.origin || req.headers.referer;
   if (!origin) return null;
-  const csrf = req.headers['x-agentkodex-csrf'];
-  if (csrf !== '1') return { status: 403, body: { ok: false, error: 'missing csrf header' } };
   try {
     const parsed = new URL(origin);
     const requestHost = String(req.headers.host || expectedHost || '').split(':')[0];
-    if (parsed.hostname === requestHost || isLoopbackHost(parsed.hostname)) return null;
-  } catch (_) {}
-  return { status: 403, body: { ok: false, error: 'invalid request origin' } };
+    if (parsed.hostname !== requestHost && !sameLoopback(parsed.hostname, requestHost)) {
+      return { status: 403, body: { ok: false, error: 'invalid request origin' } };
+    }
+  } catch (_) {
+    return { status: 403, body: { ok: false, error: 'invalid request origin' } };
+  }
+  if (isMutating(req.method) && req.headers['x-agentkodex-csrf'] !== '1') return { status: 403, body: { ok: false, error: 'missing csrf header' } };
+  return null;
 }
 
 function assertSafeBind(host, unsafePublic = false) {
@@ -80,6 +82,10 @@ function assertSafeBind(host, unsafePublic = false) {
 function isLoopbackHost(host) {
   const value = String(host || '').toLowerCase();
   return ['127.0.0.1', 'localhost', '::1', ''].includes(value) || value.startsWith('127.');
+}
+
+function sameLoopback(left, right) {
+  return isLoopbackHost(left) && isLoopbackHost(right);
 }
 
 function isMutating(method) {

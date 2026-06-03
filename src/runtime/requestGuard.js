@@ -11,7 +11,7 @@ function createRequestGuard() {
       if (typeof request.type !== 'string' || !request.type.trim()) throw new Error('Invalid daemon request type.');
     },
     record(error) {
-      if (!/Unauthorized|Unknown daemon request|Invalid daemon request/i.test(String(error?.message || error))) return;
+      if (!/Unauthorized|Unknown daemon request|Invalid daemon request|request too large/i.test(String(error?.message || error))) return;
       const now = Date.now();
       invalid.push(now);
       while (invalid.length && now - invalid[0] > WINDOW_MS) invalid.shift();

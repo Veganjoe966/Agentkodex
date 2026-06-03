@@ -53,6 +53,7 @@ async function main(argv = process.argv.slice(2)) {
   const seenApprovalPrompts = new Set();
   let server = null;
   let stopping = false;
+  let currentRequestCapability = null;
 
   function update(patch) {
     metadata = patchSession(root, metadata.id, { ...metadata, ...patch });
@@ -101,12 +102,14 @@ async function main(argv = process.argv.slice(2)) {
 
   function handleRequest(socket, request) {
     try { assertSessionToken(metadata, request); } catch (error) { return respond(socket, { ok: false, error: sanitizeError(error) }); }
+    currentRequestCapability = request.capability || null;
     const action = request.action || 'status';
     if (action === 'status') {
       respond(socket, { ok: true, session: sanitizeMetadata(metadata), childAlive: Boolean(child && !child.killed) });
       return;
     }
     if (action === 'send') {
+      if (!requireCapability(socket, 'session:send')) return;
       const message = String(request.message || '');
       if (!child || child.killed || !child.stdin.writable) return respond(socket, { ok: false, error: 'session process is not writable' });
       child.stdin.write(message);
@@ -117,6 +120,7 @@ async function main(argv = process.argv.slice(2)) {
       return;
     }
     if (action === 'approve' || action === 'deny') {
+      if (!requireCapability(socket, 'session:send')) return;
       const approvalId = request.approvalId || metadata.openApprovalId || openApprovalId;
       const approval = approvalId ? markApproval(root, approvalId, action === 'approve' ? 'approved' : 'denied') : null;
       const text = request.input || (action === 'approve' ? approval?.defaultApproveInput || 'y\n' : approval?.defaultDenyInput || 'n\n');
@@ -129,6 +133,7 @@ async function main(argv = process.argv.slice(2)) {
       return;
     }
     if (action === 'close_stdin') {
+      if (!requireCapability(socket, 'stdin:close')) return;
       if (!child || child.killed || !child.stdin) return respond(socket, { ok: false, error: 'session process is not writable' });
       try { child.stdin.end(); } catch (_) {}
       event({ type: 'close_stdin', source: 'user' });
@@ -137,6 +142,7 @@ async function main(argv = process.argv.slice(2)) {
       return;
     }
     if (action === 'close_stdin' || action === 'close-stdin') {
+      if (!requireCapability(socket, 'stdin:close')) return;
       if (!child || child.killed || !child.stdin.writable) return respond(socket, { ok: false, error: 'session stdin is not writable' });
       try { child.stdin.end(); } catch (error) { return respond(socket, { ok: false, error: error.message }); }
       event({ type: 'close_stdin', source: 'user' });
@@ -145,6 +151,7 @@ async function main(argv = process.argv.slice(2)) {
       return;
     }
     if (action === 'interrupt') {
+      if (!requireCapability(socket, 'session:interrupt')) return;
       if (child && !child.killed) child.kill('SIGINT');
       event({ type: 'interrupt', source: 'user' });
       update({ state: 'interrupted' });
@@ -152,6 +159,7 @@ async function main(argv = process.argv.slice(2)) {
       return;
     }
     if (action === 'kill') {
+      if (!requireCapability(socket, 'session:kill')) return;
       stopping = true;
       if (child && !child.killed) child.kill('SIGTERM');
       setTimeout(() => { try { if (child && !child.killed) child.kill('SIGKILL'); } catch (_) {} }, 2500).unref();
@@ -161,6 +169,14 @@ async function main(argv = process.argv.slice(2)) {
       return;
     }
     respond(socket, { ok: false, error: `unknown action: ${action}` });
+  }
+
+  function requireCapability(socket, capabilityAction) {
+    const decision = assertRuntimeCapability(root, metadata, { action: capabilityAction, capability: currentRequestCapability });
+    if (decision.allowed) return true;
+    event({ type: 'failed_capability_validation', action: capabilityAction, reason: decision.reason });
+    respond(socket, { ok: false, error: sanitizeError(decision.reason) });
+    return false;
   }
 
   server = net.createServer((socket) => {

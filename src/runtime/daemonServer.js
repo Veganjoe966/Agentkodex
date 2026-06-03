@@ -6,7 +6,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { ensureDir, appendText, shellQuote } = require('../utils');
 const { redactSecrets } = require('../policy');
-const { hardenSocket, sanitizeError } = require('../security/controlPlane');
+const { hardenSocket } = require('../security/controlPlane');
 const { ensureDaemonToken, assertDaemonToken } = require('./daemonAuth');
 const {
   socketPathForRoot,
@@ -24,7 +24,7 @@ const { createApproval, listApprovals, resolveApproval, updateApproval } = requi
 const { detectState, detectApprovalRequest, parseEventsFromOutput } = require('./stateDetector');
 const { authorizeDaemonStart, assertDaemonRuntimeCapability } = require('./daemonSecurity');
 const { createRequestGuard } = require('./requestGuard');
-const { writeAuditEvidence } = require('../audit/evidence');
+const { attachSocketHandler } = require('./socketConnection');
 
 class AgentkodexDaemon {
   constructor(root, options = {}) {
@@ -83,25 +83,11 @@ class AgentkodexDaemon {
   }
 
   handleConnection(socket) {
-    let raw = '';
-    socket.setEncoding('utf8');
-    socket.on('data', async (chunk) => {
-      raw += chunk;
-      if (!raw.includes('\n')) return;
-      const line = raw.slice(0, raw.indexOf('\n'));
-      raw = raw.slice(raw.indexOf('\n') + 1);
-      try {
-        const request = JSON.parse(line);
-        const response = await this.handleRequest(request);
-        socket.write(`${JSON.stringify({ ok: true, response })}\n`);
-      } catch (error) {
-        this.requestGuard.record(error);
-        writeAuditEvidence(this.root, { type: 'daemon_request_denied', allowed: false, reason: sanitizeError(error) });
-        this.log(`request error ${redactSecrets(error && error.stack ? error.stack : String(error))}`);
-        socket.write(`${JSON.stringify({ ok: false, error: sanitizeError(error) })}\n`);
-      } finally {
-        socket.end();
-      }
+    attachSocketHandler(socket, {
+      root: this.root,
+      requestGuard: this.requestGuard,
+      handleRequest: (request) => this.handleRequest(request),
+      log: (message) => this.log(message),
     });
   }
 
@@ -113,14 +99,14 @@ class AgentkodexDaemon {
     if (type === 'ping') return { pid: process.pid, root: this.root, socketPath: this.socketPath, sessions: this.children.size };
     if (type === 'stop') return this.stop();
     if (type === 'startSession') return this.startSession(request.session || {});
-    if (type === 'send') return this.send(request.sessionId, request.input || '', request.options || {});
-    if (type === 'interrupt') return this.interrupt(request.sessionId || 'last');
-    if (type === 'kill') return this.kill(request.sessionId || 'last');
+    if (type === 'send') return this.send(request.sessionId, request.input || '', { ...(request.options || {}), capability: request.capability });
+    if (type === 'interrupt') return this.interrupt(request.sessionId || 'last', { capability: request.capability });
+    if (type === 'kill') return this.kill(request.sessionId || 'last', { capability: request.capability });
     if (type === 'status') return this.status(request.sessionId || 'last');
     if (type === 'listSessions') return listSessions(this.root);
     if (type === 'listApprovals') return listApprovals(this.root, request.options || {});
-    if (type === 'approve') return this.decideApproval(request.approvalId || 'last', 'approved', request.input);
-    if (type === 'deny') return this.decideApproval(request.approvalId || 'last', 'denied', request.input);
+    if (type === 'approve') return this.decideApproval(request.approvalId || 'last', 'approved', request.input, request.capability);
+    if (type === 'deny') return this.decideApproval(request.approvalId || 'last', 'denied', request.input, request.capability);
     throw new Error(`Unknown daemon request type: ${type}`);
   }
 
@@ -309,6 +295,7 @@ class AgentkodexDaemon {
 
   send(sessionIdOrLast, input, options = {}) {
     const { session, child } = this.getLive(sessionIdOrLast);
+    assertDaemonRuntimeCapability(this.root, session, { action: 'session:send', capability: options.capability });
     if (!child || !child.stdin || child.killed) throw new Error(`Session is not controlled by this daemon or is not running: ${session.id}`);
     let text = String(input || '');
     if (!options.raw && !text.endsWith('\n')) text += '\n';
@@ -320,8 +307,9 @@ class AgentkodexDaemon {
     return { session: readSession(this.root, session.id), bytes: text.length };
   }
 
-  interrupt(sessionIdOrLast) {
+  interrupt(sessionIdOrLast, options = {}) {
     const { session, child } = this.getLive(sessionIdOrLast);
+    assertDaemonRuntimeCapability(this.root, session, { action: 'session:interrupt', capability: options.capability });
     if (!child) throw new Error(`Session is not controlled by this daemon or is not running: ${session.id}`);
     child.kill('SIGINT');
     appendSessionEvent(session, { type: 'interrupt_sent', signal: 'SIGINT' });
@@ -329,8 +317,9 @@ class AgentkodexDaemon {
     return { session: readSession(this.root, session.id), signal: 'SIGINT' };
   }
 
-  kill(sessionIdOrLast) {
+  kill(sessionIdOrLast, options = {}) {
     const { session, child } = this.getLive(sessionIdOrLast);
+    assertDaemonRuntimeCapability(this.root, session, { action: 'session:kill', capability: options.capability });
     if (!child) throw new Error(`Session is not controlled by this daemon or is not running: ${session.id}`);
     child.kill('SIGTERM');
     setTimeout(() => {
@@ -349,7 +338,7 @@ class AgentkodexDaemon {
     return { session, live: this.children.has(session.id) };
   }
 
-  decideApproval(approvalIdOrLast, decision, inputOverride) {
+  decideApproval(approvalIdOrLast, decision, inputOverride, capability = null) {
     const approval = resolveApproval(this.root, approvalIdOrLast || 'last');
     if (!approval) throw new Error('No open Agentkodex approval found.');
     if (approval.status !== 'open') throw new Error(`Approval is already ${approval.status}: ${approval.id}`);
@@ -373,7 +362,7 @@ class AgentkodexDaemon {
         : (decision === 'approved' ? approval.approveInput : approval.denyInput);
       if (approval.sessionId && input !== null && input !== undefined) {
         try {
-          const sendResult = this.send(approval.sessionId, input, { raw: true });
+          const sendResult = this.send(approval.sessionId, input, { raw: true, capability });
           return { approval: updated, sent: sendResult };
         } catch (error) {
           return { approval: updated, warning: error.message };
@@ -391,7 +380,4 @@ async function startDaemon(root, options = {}) {
   return daemon;
 }
 
-module.exports = {
-  AgentkodexDaemon,
-  startDaemon,
-};
+module.exports = { AgentkodexDaemon, startDaemon };

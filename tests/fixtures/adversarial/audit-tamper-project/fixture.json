@@ -1,0 +1,10 @@
+{
+  "name": "audit-tamper-project",
+  "attacks": [
+    "modify manifest",
+    "modify summary.md",
+    "modify redaction-report.json",
+    "modify copied transcript artifact"
+  ],
+  "expected": "audit verify failure"
+}

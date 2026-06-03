@@ -6,6 +6,7 @@ const { writeAuditEvidence } = require('../audit/evidence');
 function verifyExecutionCapability(root, command, options = {}, policy = {}) {
   const required = requiresCapability(policy, options);
   if (!required) return { allowed: true, reason: 'Capability not required for safe action.' };
+  const projectRoot = options.projectRoot || options.root || root;
   const expected = {
     sessionId: options.sessionId || options.holder || '',
     agentId: options.agent || options.agentId || 'agentkodex',
@@ -14,9 +15,9 @@ function verifyExecutionCapability(root, command, options = {}, policy = {}) {
     path: options.cwd || root,
     runDir: options.logDir || options.runDir,
   };
-  const result = verifyCapability(root, options.capability, expected);
+  const result = verifyCapability(projectRoot, options.capability, expected);
   if (!result.allowed) {
-    writeAuditEvidence(root, {
+    writeAuditEvidence(projectRoot, {
       type: 'failed_capability_validation',
       allowed: false,
       reason: result.reason,

@@ -1,0 +1,9 @@
+{
+  "payloads": [
+    { "name": "missing-token", "request": { "type": "ping" } },
+    { "name": "unknown-method", "request": { "type": "nope" } },
+    { "name": "missing-capability-send", "request": { "type": "send", "sessionId": "last", "input": "x" } },
+    { "name": "malformed-json", "raw": "{not-json}\\n" }
+  ],
+  "expected": "all denied with sanitized errors"
+}

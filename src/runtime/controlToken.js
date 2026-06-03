@@ -12,7 +12,9 @@ function ensureSessionToken(session) {
 }
 
 function withSessionToken(session, payload = {}) {
-  return { ...payload, token: ensureSessionToken(session) };
+  const out = { ...payload, token: ensureSessionToken(session) };
+  if (requiresCapability(payload.action || payload.type)) out.capability = session.capabilities?.runtime || null;
+  return out;
 }
 
 function assertSessionToken(session, request = {}) {
@@ -26,3 +28,7 @@ module.exports = {
   withSessionToken,
   assertSessionToken,
 };
+
+function requiresCapability(action) {
+  return ['send', 'approve', 'deny', 'close_stdin', 'close-stdin', 'interrupt', 'kill'].includes(String(action || ''));
+}

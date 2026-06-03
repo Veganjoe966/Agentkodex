@@ -33,6 +33,7 @@ function firstCommandToken(command) {
 
 async function runCommand(command, options = {}) {
   const cwd = options.cwd || process.cwd();
+  const projectRoot = path.resolve(options.projectRoot || options.root || cwd);
   const env = { ...process.env, ...(options.env || {}) };
   const timeoutMs = Number(options.timeoutMs || 30 * 60 * 1000);
   const logDir = options.logDir || cwd;
@@ -48,7 +49,7 @@ async function runCommand(command, options = {}) {
   if (outputFile) writeText(outputFile, '');
 
   const policy = authorizeCommand(command, {
-    root: cwd,
+    root: projectRoot,
     mode,
     yes,
     intent: options.intent || command,
@@ -85,6 +86,7 @@ async function runCommand(command, options = {}) {
   const capability = verifyExecutionCapability(cwd, command, {
     ...options,
     cwd,
+    projectRoot,
     logDir,
   }, policy);
   if (!capability.allowed) {

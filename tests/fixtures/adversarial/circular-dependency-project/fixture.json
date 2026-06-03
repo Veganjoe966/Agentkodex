@@ -1,0 +1,8 @@
+{
+  "name": "circular-dependency-project",
+  "files": {
+    "a.source": "import './b.js'; export const a = 1;",
+    "b.source": "import './a.js'; export const b = 1;"
+  },
+  "expected": "circular dependency failure after generated as .js files in temp project"
+}

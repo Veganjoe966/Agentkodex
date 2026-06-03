@@ -66,6 +66,9 @@ test('scorecards and routing include and use governance fields', () => {
     deadImportCount: 1,
     architectureViolationCount: 1,
   }));
+  markRunHistory(dir, 'clean');
+  markRunHistory(dir, 'security-risk');
+  markRunHistory(dir, 'quality-risk');
   const cards = loadScorecards(dir).agents;
   assert.equal(cards['security-risk'].failedCapabilityCount, 1);
   assert.equal(cards['quality-risk'].completionBlocked, true);
@@ -106,4 +109,9 @@ function metrics(overrides = {}) {
     completionBlocked: false,
     ...overrides,
   };
+}
+
+function markRunHistory(root, agent) {
+  const run = createRun(root, `history ${agent}`);
+  updateRunStatus(run.dir, { agent, status: 'passed' });
 }

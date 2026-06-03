@@ -1,0 +1,11 @@
+{
+  "payloads": [
+    "qualityGateOk=false",
+    "securityDeniedCount>0",
+    "failedCapabilityCount>0",
+    "approvalRequiredCount>0",
+    "auditEvidenceMissing=true",
+    "completionBlocked=true"
+  ],
+  "expected": "completion denied"
+}

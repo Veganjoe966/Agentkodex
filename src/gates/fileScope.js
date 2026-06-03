@@ -30,7 +30,11 @@ function isSafeFile(root, file) {
 }
 
 function isEnvFile(name) {
-  return /^\.env(?:$|\.)/.test(name) && !/\.(example|sample|template)$/i.test(name);
+  const value = String(name || '').toLowerCase();
+  if (/\.(example|sample|template)$/i.test(value)) return false;
+  if (value === '.envrc') return true;
+  if (/^\.env(?:$|\.)/.test(value)) return true;
+  return /\.env$/.test(value);
 }
 
 function walk(dir) {

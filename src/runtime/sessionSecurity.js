@@ -53,11 +53,13 @@ function prepareRuntimeSecurity(input = {}) {
 }
 
 function assertRuntimeCapability(root, session, options = {}) {
-  const capability = options.capability || session.capabilities?.runtime;
+  const action = options.action || 'command:start';
+  const capability = options.capability || (action === 'command:start' ? session.capabilities?.runtime : null);
   return verifyRuntimeCapability(root, capability, {
     sessionId: session.id,
     agentId: session.agent,
     path: session.cwd || root,
+    action,
     runDir: session.runDir,
   });
 }

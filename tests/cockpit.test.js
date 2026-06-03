@@ -27,6 +27,29 @@ test('cockpit exposes health and session APIs', async () => {
   }
 });
 
+test('cockpit rejects bad-origin API requests even with a valid token', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ak-cockpit-origin-'));
+  ensureKodex(root);
+  const server = await startCockpit(root, { host: '127.0.0.1', port: 0, auth: { token: 'test-token', tokenPath: path.join(root, 'token') } });
+  try {
+    const { port } = server.address();
+    const read = await requestJson(`http://127.0.0.1:${port}/api/status`, {
+      headers: { authorization: 'Bearer test-token', origin: 'http://evil.example' },
+    });
+    assert.equal(read.statusCode, 403);
+    assert.match(read.error, /origin/i);
+    const mutation = await requestJson(`http://127.0.0.1:${port}/api/sessions/nope/kill`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer test-token', origin: 'http://evil.example', 'x-agentkodex-csrf': '1' },
+      body: '{}',
+    });
+    assert.equal(mutation.statusCode, 403);
+    assert.match(mutation.error, /origin/i);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test('cockpit rejects public bind unless explicitly unsafe', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ak-cockpit-host-'));
   ensureKodex(root);
@@ -34,14 +57,21 @@ test('cockpit rejects public bind unless explicitly unsafe', async () => {
 });
 
 function getJson(url, token = '') {
+  return requestJson(url, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+}
+
+function requestJson(url, options = {}) {
   return new Promise((resolve, reject) => {
-    http.get(url, { headers: token ? { authorization: `Bearer ${token}` } : {} }, (res) => {
+    const req = http.request(url, { method: options.method || 'GET', headers: options.headers || {} }, (res) => {
       let raw = '';
       res.setEncoding('utf8');
       res.on('data', (chunk) => { raw += chunk; });
       res.on('end', () => {
         try { resolve({ statusCode: res.statusCode, ...JSON.parse(raw) }); } catch (error) { reject(error); }
       });
-    }).on('error', reject);
+    });
+    req.on('error', reject);
+    if (options.body) req.write(options.body);
+    req.end();
   });
 }

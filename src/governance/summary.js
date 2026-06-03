@@ -6,6 +6,7 @@ const { rootEvidencePath } = require('../audit/evidence');
 
 function collectRunGovernance(root, runDir, input = {}) {
   const events = readEvidence(root, runDir);
+  const auditEvidenceMissing = Boolean(runDir && events.length === 0);
   const quality = qualityFromEvidence(events) || qualityFromGates(runDir, input.gateResults);
   const status = input.status || (runDir ? readJson(path.join(runDir, 'status.json'), {}) : {});
   const securityDeniedCount = count(events, (e) => e.allowed === false && /security|denied_action/i.test(e.type || ''));
@@ -21,6 +22,7 @@ function collectRunGovernance(root, runDir, input = {}) {
     securityDeniedCount ||
     failedCapabilityCount ||
     quality?.ok === false ||
+    auditEvidenceMissing ||
     /failed_(security|gates|agent_policy)|denied|blocked/.test(String(status.status || ''))
   );
   return {
@@ -30,6 +32,8 @@ function collectRunGovernance(root, runDir, input = {}) {
     qualityGateOk: quality ? quality.ok : null,
     qualityViolationCount: quality ? quality.violations : 0,
     completionBlocked,
+    auditEvidenceMissing,
+    evidenceEventCount: events.length,
     approvalRequiredCount,
     unsafeActionAttemptCount,
   };
@@ -45,29 +49,39 @@ function blocksCompletion(governance = {}) {
     Number(governance.failedCapabilityCount || 0) > 0 ||
     Number(governance.securityDeniedCount || 0) > 0 ||
     Number(governance.approvalRequiredCount || 0) > 0 ||
+    governance.auditEvidenceMissing === true ||
     governance.qualityGateOk === false
   );
 }
 
 function readEvidence(root, runDir) {
-  const files = [runDir ? path.join(runDir, 'audit-evidence.jsonl') : rootEvidencePath(root)];
+  const files = runDir ? [path.join(runDir, 'audit-evidence.jsonl'), rootEvidencePath(root)] : [rootEvidencePath(root)];
   const seen = new Set();
+  const seenLines = new Set();
   const events = [];
   for (const file of files) {
     if (seen.has(file)) continue;
     seen.add(file);
     for (const line of readText(file, '').split(/\r?\n/)) {
       if (!line.trim()) continue;
-      try { events.push(JSON.parse(line)); } catch (_) {}
+      if (seenLines.has(line)) continue;
+      seenLines.add(line);
+      try {
+        const event = JSON.parse(line);
+        if (!runDir || file !== rootEvidencePath(root) || event.runDir === runDir) events.push(event);
+      } catch (_) {}
     }
   }
   return events;
 }
 
 function qualityFromEvidence(events) {
-  const latest = [...events].reverse().find((event) => event.type === 'quality_gate_result');
-  if (!latest) return null;
-  return { ok: Boolean(latest.ok), violations: violationCount(latest.checks || []) };
+  const qualityEvents = events.filter((event) => event.type === 'quality_gate_result');
+  if (!qualityEvents.length) return null;
+  const failed = qualityEvents.filter((event) => event.ok === false);
+  const selected = failed[0] || qualityEvents[qualityEvents.length - 1];
+  const violations = qualityEvents.reduce((sum, event) => sum + violationCount(event.checks || []), 0);
+  return { ok: failed.length === 0 && Boolean(selected.ok), violations };
 }
 
 function qualityFromGates(runDir, gateResults) {

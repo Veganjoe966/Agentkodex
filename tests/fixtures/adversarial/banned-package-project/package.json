@@ -1,0 +1,7 @@
+{
+  "name": "adversarial-banned-package-project",
+  "version": "0.0.0",
+  "dependencies": {
+    "posthog-js": "0.0.0"
+  }
+}

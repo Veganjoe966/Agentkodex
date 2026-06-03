@@ -19,6 +19,10 @@ function request(root, payload, options = {}) {
 }
 
 function preparePayload(root, payload = {}) {
+  if (requiresCapability(payload.type)) {
+    const session = payload.sessionId ? getSession(root, payload.sessionId) : null;
+    return { ...payload, capability: payload.capability || session?.capabilities?.runtime || null };
+  }
   if (payload.type !== 'startSession' || !payload.session?.command) return payload;
   const session = { ...payload.session };
   session.sessionId = session.sessionId || newSessionId(`${session.agent || 'custom'}:${session.task || ''}:${session.command}`);
@@ -33,7 +37,13 @@ function preparePayload(root, payload = {}) {
 function requestSession(root, idOrLast, payload, options = {}) {
   const session = getSession(root, idOrLast || 'last');
   if (!session) return Promise.reject(new Error(`Session not found: ${idOrLast || 'last'}`));
-  return request(root, { type: payload.action || payload.type || 'status', sessionId: session.id, ...payload }, options);
+  const type = payload.action || payload.type || 'status';
+  const capability = requiresCapability(type) ? session.capabilities?.runtime || null : payload.capability;
+  return request(root, { type, sessionId: session.id, ...payload, capability }, options);
+}
+
+function requiresCapability(type) {
+  return ['send', 'interrupt', 'kill', 'approve', 'deny'].includes(String(type || ''));
 }
 
 function requestSocket(socketPath, payload, options = {}) {

@@ -76,6 +76,7 @@ function dependencyHygieneCheck(root, files, config = {}) {
     ...(packageJson.optionalDependencies || {}),
   }));
   const bannedList = Array.isArray(config.bannedPackages) ? config.bannedPackages : DEFAULT_BANNED;
+  const optionalImports = new Set(Array.isArray(config.optionalImports) ? config.optionalImports : []);
   const errors = [];
   const warnings = [];
   for (const detail of duplicateDetails) errors.push(detail);
@@ -85,7 +86,7 @@ function dependencyHygieneCheck(root, files, config = {}) {
       const pkg = packageName(spec);
       if (spec.startsWith('node:') || BUILTINS.has(pkg) || BUILTINS.has(spec)) continue;
       if (bannedList.some((item) => pkg === item || spec.startsWith(`${item}/`))) errors.push(`${path.relative(root, file)} imports banned package ${pkg}`);
-      else if (!declared.has(pkg)) {
+      else if (!declared.has(pkg) && !optionalImports.has(pkg)) {
         const detail = `${path.relative(root, file)} imports missing dependency ${pkg}`;
         if (config.failOnMissingDeps) errors.push(detail);
         else warnings.push(detail);
@@ -129,18 +130,23 @@ function architectureBoundariesCheck(root, files, map) {
 }
 
 const IMPORT_RE = /import\s+(?:type\s+)?([\s\S]*?)\s+from\s+['"]([^'"]+)['"];?|import\s+['"]([^'"]+)['"];?/g;
+const DYNAMIC_IMPORT_RE = /\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
 const REQUIRE_RE = /require\(\s*['"]([^'"]+)['"]\s*\)/g;
 
 function importSpecs(text) {
   const out = [];
-  for (const match of text.matchAll(IMPORT_RE)) out.push(match[2] || match[3]);
-  for (const match of text.matchAll(REQUIRE_RE)) out.push(match[1]);
+  const mask = codeMask(text);
+  for (const match of text.matchAll(IMPORT_RE)) if (mask[match.index]) out.push(match[2] || match[3]);
+  for (const match of text.matchAll(DYNAMIC_IMPORT_RE)) if (mask[match.index]) out.push(match[1]);
+  for (const match of text.matchAll(REQUIRE_RE)) if (mask[match.index]) out.push(match[1]);
   return out.filter(Boolean);
 }
 
 function esImports(text) {
   const out = [];
+  const mask = codeMask(text);
   for (const match of text.matchAll(IMPORT_RE)) {
+    if (!mask[match.index]) continue;
     const clause = String(match[1] || '').trim();
     if (!clause || clause.startsWith('{') && !clause.endsWith('}')) continue;
     if (clause.startsWith('* as ')) out.push({ local: clause.replace('* as ', '').trim() });
@@ -188,7 +194,9 @@ function functionsIn(text) {
 
 function matchingBrace(text, start) {
   let depth = 0;
+  const mask = codeMask(text);
   for (let i = start; i < text.length; i += 1) {
+    if (!mask[i]) continue;
     if (text[i] === '{') depth += 1;
     if (text[i] === '}' && --depth === 0) return i;
   }
@@ -196,8 +204,72 @@ function matchingBrace(text, start) {
 }
 
 function complexityScore(text) {
-  const matches = text.match(/\b(if|for|while|case|catch)\b|&&|\|\||\?/g);
+  const clean = stripCommentsAndStrings(text);
+  const matches = clean.match(/\b(if|for|while|case|catch)\b|&&|\|\||\?/g);
   return 1 + (matches ? matches.length : 0);
+}
+
+function stripCommentsAndStrings(text) {
+  const mask = codeMask(text);
+  return text.split('').map((ch, index) => mask[index] ? ch : (ch === '\n' ? '\n' : ' ')).join('');
+}
+
+function codeMask(text) {
+  const mask = Array.from({ length: text.length }, () => true);
+  let state = 'code';
+  let escape = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    const next = text[i + 1] || '';
+    if (state === 'code') {
+      if (ch === '/' && next === '/') {
+        state = 'line';
+        mask[i] = false;
+        mask[i + 1] = false;
+        i += 1;
+      } else if (ch === '/' && next === '*') {
+        state = 'block';
+        mask[i] = false;
+        mask[i + 1] = false;
+        i += 1;
+      } else if (ch === '"' || ch === "'" || ch === '`') {
+        state = ch;
+        mask[i] = false;
+      } else {
+        mask[i] = true;
+      }
+      continue;
+    }
+    if (state === 'line') {
+      if (ch === '\n') {
+        state = 'code';
+        mask[i] = true;
+      } else mask[i] = false;
+      continue;
+    }
+    if (state === 'block') {
+      if (ch === '*' && next === '/') {
+        state = 'code';
+        mask[i] = false;
+        mask[i + 1] = false;
+        i += 1;
+      } else mask[i] = false;
+      continue;
+    }
+    if (escape) {
+      escape = false;
+      mask[i] = false;
+      continue;
+    }
+    if (ch === '\\') {
+      escape = true;
+      mask[i] = false;
+      continue;
+    }
+    if (ch === state) state = 'code';
+    mask[i] = false;
+  }
+  return mask;
 }
 
 function packageName(spec) {

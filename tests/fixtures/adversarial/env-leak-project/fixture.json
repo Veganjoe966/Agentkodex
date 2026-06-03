@@ -1,0 +1,10 @@
+{
+  "name": "env-leak-project",
+  "purpose": "Generate nested .env, .envrc, and prod.env files in a temp project and verify quality gate blocks them.",
+  "generate": [
+    "config/.env",
+    ".envrc",
+    "prod.env"
+  ],
+  "expected": "quality gate failure"
+}

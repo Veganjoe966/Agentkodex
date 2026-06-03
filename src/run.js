@@ -15,6 +15,7 @@ const { runLintguardGate } = require('./lintguard/gate');
 const { runQualityGateAsGate } = require('./gates/qualityGate');
 const { issueRuntimeCapability } = require('./capabilities/phases');
 const { collectRunGovernance, blocksCompletion } = require('./governance/summary');
+const { writeAuditEvidence } = require('./audit/evidence');
 
 async function runTask(options) {
   const root = path.resolve(options.root || process.cwd());
@@ -30,6 +31,7 @@ async function runTask(options) {
   const echo = options.echo !== false;
 
   const run = createRun(root, task);
+  writeAuditEvidence(root, { type: 'run_started', allowed: true, runId: run.id, agent: agentId, mode }, { runDir: run.dir });
   const logPaths = {
     transcriptFile: path.join(run.dir, 'transcript.log'),
     commandsFile: path.join(run.dir, 'commands.log'),
@@ -332,6 +334,7 @@ function renderQaReport(qa) {
 
 function decideFinalStatus({ agentRun, gateResults, security, gates, governance = {} }) {
   if (agentRun.error) return 'failed_agent';
+  if (governance.auditEvidenceMissing) return 'failed_audit';
   if (Number(governance.failedCapabilityCount || 0) > 0 || Number(governance.securityDeniedCount || 0) > 0 || Number(governance.approvalRequiredCount || 0) > 0) return 'failed_security';
   if (governance.qualityGateOk === false || governance.completionBlocked) return 'failed_gates';
   if (agentRun.result?.capability?.allowed === false) return 'failed_security';

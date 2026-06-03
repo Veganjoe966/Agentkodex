@@ -1,0 +1,9 @@
+{
+  "payloads": [
+    { "name": "missing-token", "method": "POST", "path": "/api/sessions/last/kill" },
+    { "name": "bad-token", "method": "POST", "path": "/api/sessions/last/kill", "token": "bad" },
+    { "name": "csrf-cross-origin", "method": "POST", "path": "/api/sessions/last/send", "origin": "https://evil.example" },
+    { "name": "query-token", "method": "GET", "path": "/api/sessions?token=leaky" }
+  ],
+  "expected": "all unauthorized or forbidden"
+}

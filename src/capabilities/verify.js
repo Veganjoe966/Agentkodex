@@ -1,13 +1,12 @@
 'use strict';
 
 const crypto = require('crypto');
-const path = require('path');
 const { legacySign, canonical } = require('./issuer');
 const { verificationKeys } = require('./keys');
 const { writeAuditEvidence } = require('../audit/evidence');
-const { isSubpath } = require('../utils');
 const { loadPolicyConfig } = require('../policy/config');
 const { isCapabilityRevoked } = require('./revocation');
+const { pathAllowed } = require('./pathScope');
 
 function verifyCapability(root, capability, expected = {}) {
   const result = checkCapability(root, capability, expected);
@@ -88,11 +87,6 @@ function verifySignature(root, capability) {
   } catch (_) {
     return denied('Capability signature is invalid.');
   }
-}
-
-function pathAllowed(allowedPaths, target) {
-  if (!target) return true;
-  return allowedPaths.some((allowed) => isSubpath(path.resolve(allowed), path.resolve(target)));
 }
 
 function denied(reason) {

@@ -2,11 +2,18 @@
 
 const { redactSecrets } = require('./security/redaction');
 const { configuredCommandDecision, loadPolicyConfig } = require('./policy/config');
+const { shellSyntaxRisk } = require('./policy/shellSafety');
 
 const BLOCKED_PATTERNS = [
   /\brm\s+-rf\s+\//i,
   /\brm\s+-rf\s+~\b/i,
   /\brm\s+-rf\s+\$HOME\b/i,
+  /\.agentkodex[/\\]runtime[/\\](capability-keys\.json|daemon\.token|cockpit\.token)\b/i,
+  /\.agentkodex[/\\]sessions[/\\][^\s"'`]+[/\\]control\.token\b/i,
+  /\b(capability-keys\.json|daemon\.token|cockpit\.token|control\.token)\b/i,
+  /\b(rm|rmdir|mv|cp|touch|truncate|tee|sed\s+-i|perl\s+-pi|python|python3|node|sh|bash)\b.+\.agentkodex[/\\](audit|runs|sessions|approvals|agents|runtime|tournaments|swarms)\b/i,
+  /(>|>>)\s*\.agentkodex[/\\](audit|runs|sessions|approvals|agents|runtime|tournaments|swarms)\b/i,
+  /\.agentkodex[/\\](audit|runs|sessions|approvals|agents|runtime|tournaments|swarms)\b[^\n]*(>|>>|;|\|\||&&|\|)/i,
   /\bmkfs\b/i,
   /\bdd\s+if=/i,
   /\bshutdown\b/i,
@@ -69,6 +76,8 @@ function classifyCommand(command) {
   for (const pattern of MANUAL_APPROVAL_PATTERNS) {
     if (pattern.test(value)) return { risk: 'approval_required', category: 'manual', reason: `matched manual approval pattern ${pattern}` };
   }
+  const shellRisk = shellSyntaxRisk(value);
+  if (shellRisk) return shellRisk;
   for (const pattern of APPROVAL_PATTERNS) {
     if (pattern.test(value)) return { risk: 'approval_required', category: 'standard', reason: `matched approval pattern ${pattern}` };
   }
@@ -83,19 +92,16 @@ function policyAllows(command, options = {}) {
   const yes = Boolean(options.yes || options.autoApprove);
   const agentLaunch = Boolean(options.agentLaunch);
   const policyConfig = loadPolicyConfig(options.root, options);
-  const classification = configuredCommandDecision(command, policyConfig) || classifyCommand(command);
+  const configured = configuredCommandDecision(command, policyConfig);
+  const classification = chooseClassification(command, configured);
 
   if (classification.risk === 'blocked') {
     return { allowed: false, requiresApproval: false, classification, reason: 'Blocked by Agentkodex command policy' };
   }
 
   if (mode === 'observe') {
-    if (isReadOnlyCommand(command)) return { allowed: true, requiresApproval: false, classification, reason: 'Allowed read-only command in observe mode' };
+    if (classification.risk === 'safe' && isReadOnlyCommand(command)) return { allowed: true, requiresApproval: false, classification, reason: 'Allowed read-only command in observe mode' };
     return { allowed: false, requiresApproval: true, classification, reason: 'Observe mode only executes commands classified as safe' };
-  }
-
-  if (agentLaunch) {
-    return { allowed: true, requiresApproval: false, classification, reason: 'Allowed as coding-agent CLI launch' };
   }
 
   if (classification.risk === 'approval_required') {
@@ -106,6 +112,10 @@ function policyAllows(command, options = {}) {
       return { allowed: true, requiresApproval: false, classification, reason: 'Approved by mode or --yes' };
     }
     return { allowed: false, requiresApproval: true, classification, reason: 'Command requires explicit approval. Re-run with --yes after reviewing the command.' };
+  }
+
+  if (agentLaunch) {
+    return { allowed: true, requiresApproval: false, classification, reason: 'Allowed as coding-agent CLI launch' };
   }
 
   if (classification.risk === 'unknown') {
@@ -129,6 +139,14 @@ function isReadOnlyCommand(command) {
   return READONLY_PATTERNS.some((pattern) => pattern.test(String(command || '').trim()));
 }
 
+function chooseClassification(command, configured) {
+  const native = classifyCommand(command);
+  if (native.risk === 'blocked') return native;
+  if (configured?.risk === 'blocked') return configured;
+  if (native.risk === 'approval_required' && ['manual', 'shell_control'].includes(native.category)) return native;
+  return configured || native;
+}
+
 module.exports = {
   classifyCommand,
   policyAllows,
@@ -140,4 +158,5 @@ module.exports = {
   READONLY_PATTERNS,
   normalizeMode,
   isReadOnlyCommand,
+  chooseClassification,
 };

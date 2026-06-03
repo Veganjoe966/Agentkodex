@@ -32,11 +32,14 @@ function authorizeDaemonStart(root, input, command, cwd, mode, yes) {
   return { sessionId, policy, capability: input.capability };
 }
 
-function assertDaemonRuntimeCapability(root, session) {
-  const result = verifyRuntimeCapability(root, session.capabilities?.runtime, {
+function assertDaemonRuntimeCapability(root, session, options = {}) {
+  const action = options.action || 'command:start';
+  const capability = options.capability || (action === 'command:start' ? session.capabilities?.runtime : null);
+  const result = verifyRuntimeCapability(root, capability, {
     sessionId: session.id,
     agentId: session.agent,
     path: session.cwd || root,
+    action,
     runDir: session.runDir,
   });
   if (!result.allowed) throw new Error(result.reason);
