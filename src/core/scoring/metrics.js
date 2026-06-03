@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { readJson, readText, exists } = require('../../utils');
-const { collectRunGovernance } = require('../../governance/summary');
+const { collectRunGovernance, readEvidence } = require('../../governance/summary');
 
 const PASS_STATUSES = new Set(['passed', 'completed_no_gates', 'completed_no_gates_discovered']);
 const GATES = ['lint', 'test', 'build', 'e2e', 'quality'];
@@ -16,6 +16,7 @@ function collectRunMetrics(input = {}) {
   const endedAt = input.endedAt || status.completedAt || run.endedAt || null;
   const gates = gateSummary(gateResults);
   const governance = run.governance || collectRunGovernance(input.root || process.cwd(), run.dir, { gateResults, status });
+  const qualitySignals = collectQualitySignals(input.root || process.cwd(), run.dir, gateResults);
   const completion = PASS_STATUSES.has(status.status || run.status?.status);
   const diffPatch = readText(path.join(run.dir || '', 'diff.patch'), '');
   const diffStat = readText(path.join(run.dir || '', 'diff.stat'), '');
@@ -43,6 +44,7 @@ function collectRunMetrics(input = {}) {
     completionBlocked: governance.completionBlocked || (!completion && (governance.securityDeniedCount > 0 || governance.qualityGateOk === false)),
     approvalRequiredCount: governance.approvalRequiredCount,
     unsafeActionAttemptCount: governance.unsafeActionAttemptCount,
+    ...qualitySignals,
   };
 }
 
@@ -104,9 +106,41 @@ function parseChangedFiles(diffStat) {
   return text.trim() ? null : 0;
 }
 
+function collectQualitySignals(root, runDir, gateResults = []) {
+  const checks = qualityChecksFromGates(gateResults) || qualityChecksFromEvidence(root, runDir) || [];
+  return {
+    lintErrorCount: errorsFor(checks, ['eslint', 'lint']),
+    typeErrorCount: errorsFor(checks, ['typecheck', 'typescript']),
+    testFailureCount: errorsFor(checks, ['tests', 'test']),
+    complexityViolationCount: errorsFor(checks, ['complexity']),
+    circularDependencyCount: errorsFor(checks, ['circular-deps']),
+    deadImportCount: errorsFor(checks, ['dead-imports']),
+    architectureViolationCount: errorsFor(checks, ['architecture', 'architecture-boundaries']),
+  };
+}
+
+function qualityChecksFromGates(gateResults = []) {
+  const quality = (gateResults || []).find((item) => item.gate === 'quality');
+  if (!quality?.outputPath) return null;
+  const data = readJson(quality.outputPath, null);
+  return Array.isArray(data?.checks) ? data.checks : null;
+}
+
+function qualityChecksFromEvidence(root, runDir) {
+  const latest = [...readEvidence(root, runDir)].reverse().find((event) => event.type === 'quality_gate_result');
+  return Array.isArray(latest?.checks) ? latest.checks : null;
+}
+
+function errorsFor(checks, names) {
+  return checks
+    .filter((check) => names.includes(check.name))
+    .reduce((sum, check) => sum + Number(check.errors || 0), 0);
+}
+
 module.exports = {
   GATES,
   collectRunMetrics,
   scoreMetrics,
   selectWinner,
+  collectQualitySignals,
 };

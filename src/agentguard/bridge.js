@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { loadConfig } = require('../kodexStore');
@@ -64,7 +65,7 @@ function findAgentguardSource(root, settings = {}) {
     process.env.AGENTGUARD_SOURCE,
     settings.source,
     path.join(path.dirname(root), 'agentguard', 'Agentguard'),
-    '/root/agentguard/Agentguard',
+    path.join(os.homedir(), 'agentguard', 'Agentguard'),
   ].filter(Boolean);
   return candidates.find((candidate) => fs.existsSync(path.join(candidate, 'agentguard', 'bridge.py'))) || null;
 }

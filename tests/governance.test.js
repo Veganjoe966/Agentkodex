@@ -53,14 +53,29 @@ test('scorecards and routing include and use governance fields', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ak-gov-route-'));
   recordAgentRun(dir, 'clean', 'large refactor', metrics({ completion: true, qualityGateOk: true }));
   recordAgentRun(dir, 'security-risk', 'large refactor', metrics({ completion: true, securityDeniedCount: 2, failedCapabilityCount: 1, unsafeActionAttemptCount: 2 }));
-  recordAgentRun(dir, 'quality-risk', 'large refactor', metrics({ completion: true, qualityGateOk: false, qualityViolationCount: 8, completionBlocked: true }));
+  recordAgentRun(dir, 'quality-risk', 'large refactor', metrics({
+    completion: true,
+    qualityGateOk: false,
+    qualityViolationCount: 8,
+    completionBlocked: true,
+    lintErrorCount: 2,
+    typeErrorCount: 1,
+    testFailureCount: 1,
+    complexityViolationCount: 3,
+    circularDependencyCount: 1,
+    deadImportCount: 1,
+    architectureViolationCount: 1,
+  }));
   const cards = loadScorecards(dir).agents;
   assert.equal(cards['security-risk'].failedCapabilityCount, 1);
   assert.equal(cards['quality-risk'].completionBlocked, true);
+  assert.equal(cards['quality-risk'].lintErrorCount, 2);
+  assert.equal(cards['quality-risk'].architectureViolationCount, 1);
   const route = routeTask(dir, 'large refactor');
   assert.equal(route.selected, 'clean');
   assert.ok(route.candidates.find((item) => item.agent === 'clean').score > route.candidates.find((item) => item.agent === 'security-risk').score);
   assert.ok(Object.prototype.hasOwnProperty.call(route.candidates[0], 'unsafeActionAttemptCount'));
+  assert.ok(Object.prototype.hasOwnProperty.call(route.candidates[0], 'lintErrorCount'));
 });
 
 test('completion is blocked by quality or capability governance', () => {
@@ -69,6 +84,7 @@ test('completion is blocked by quality or capability governance', () => {
   const security = { findings: [] };
   assert.equal(decideFinalStatus({ agentRun, gateResults, security, gates: ['quality'], governance: { qualityGateOk: false } }), 'failed_gates');
   assert.equal(decideFinalStatus({ agentRun, gateResults, security, gates: ['test'], governance: { failedCapabilityCount: 1 } }), 'failed_security');
+  assert.equal(decideFinalStatus({ agentRun, gateResults, security, gates: ['test'], governance: { approvalRequiredCount: 1 } }), 'failed_security');
   const qa = createQaReport({ task: 'blocked', gateResults, agentRun, security, governance: { qualityGateOk: false } });
   assert.equal(qa.pass, false);
   assert.match(qa.blockingIssues.join('\n'), /Governance evidence/);

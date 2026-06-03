@@ -5,6 +5,9 @@ const { authorizeWithAgentguard } = require('./agentguard/bridge');
 
 function authorizeCommand(command, options = {}) {
   const jsPolicy = policyAllows(command, {
+    root: options.root,
+    config: options.config,
+    policy: options.policy,
     mode: options.mode,
     yes: options.yes,
     agentLaunch: options.agentLaunch,

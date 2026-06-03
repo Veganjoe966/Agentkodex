@@ -8,7 +8,7 @@ const os = require('os');
 const { authorizeCommand } = require('../src/authorization');
 const { findAgentguardSource } = require('../src/agentguard/bridge');
 
-const source = findAgentguardSource('/root/agentkodex', {});
+const source = findAgentguardSource(path.join(os.homedir(), 'agentkodex'), {});
 
 test('agentguard bridge authorizes safe commands and gates risky commands', { skip: !source }, () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ak-agentguard-'));

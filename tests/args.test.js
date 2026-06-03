@@ -16,3 +16,9 @@ test('repo alias can still be parsed as a string flag', () => {
   assert.equal(stringFlag(parsed.flags, 'repo'), '/tmp/app');
   assert.equal(booleanFlag(parsed.flags, 'json'), true);
 });
+
+test('leading en dash flags are normalized', () => {
+  const parsed = parseArgs(['–json', 'task']);
+  assert.equal(booleanFlag(parsed.flags, 'json'), true);
+  assert.deepEqual(parsed.positionals, ['task']);
+});

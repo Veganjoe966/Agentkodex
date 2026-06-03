@@ -16,6 +16,10 @@ test('installer is npm-first with GitHub fallback and no sudo path', () => {
   assert.match(script, /CLI-native agent operations runtime/);
   assert.match(script, /run_with_animation/);
   assert.match(script, /AGENTKODEX_NO_ANIMATION/);
+  assert.match(script, /AGENTKODEX_NO_PATH_REPAIR/);
+  assert.match(script, /npm config get prefix/);
+  assert.match(script, /append_profile_path/);
+  assert.doesNotMatch(script, /npm bin -g/);
   assert.doesNotMatch(script, /\bsudo\b/);
   const syntax = spawnSync('sh', ['-n', scriptPath], { encoding: 'utf8' });
   assert.equal(syntax.status, 0, syntax.stderr);

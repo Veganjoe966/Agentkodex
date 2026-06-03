@@ -98,6 +98,13 @@ function emptyCard(agent) {
     qualityPasses: 0,
     qualitySamples: 0,
     qualityViolationCount: 0,
+    lintErrorCount: 0,
+    typeErrorCount: 0,
+    testFailureCount: 0,
+    complexityViolationCount: 0,
+    circularDependencyCount: 0,
+    deadImportCount: 0,
+    architectureViolationCount: 0,
     completionBlocked: false,
     completionBlockedCount: 0,
     taskCategories: {},
@@ -132,6 +139,13 @@ function applyGovernance(card, metrics = {}) {
     if (metrics.qualityGateOk) card.qualityPasses += 1;
   }
   card.qualityViolationCount += Number(metrics.qualityViolationCount || 0);
+  card.lintErrorCount += Number(metrics.lintErrorCount || 0);
+  card.typeErrorCount += Number(metrics.typeErrorCount || 0);
+  card.testFailureCount += Number(metrics.testFailureCount || 0);
+  card.complexityViolationCount += Number(metrics.complexityViolationCount || 0);
+  card.circularDependencyCount += Number(metrics.circularDependencyCount || 0);
+  card.deadImportCount += Number(metrics.deadImportCount || 0);
+  card.architectureViolationCount += Number(metrics.architectureViolationCount || 0);
   if (metrics.completionBlocked) card.completionBlockedCount += 1;
 }
 

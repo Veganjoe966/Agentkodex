@@ -35,7 +35,7 @@ function parseArgs(argv) {
   const positionals = [];
 
   for (let i = 0; i < argv.length; i += 1) {
-    const token = argv[i];
+    const token = normalizeArg(argv[i]);
 
     if (token === '--') {
       positionals.push(...argv.slice(i + 1));
@@ -57,7 +57,7 @@ function parseArgs(argv) {
         setFlag(flags, key, true);
         continue;
       }
-      const next = argv[i + 1];
+      const next = normalizeArg(argv[i + 1]);
       if (next && !next.startsWith('-')) {
         setFlag(flags, key, next);
         i += 1;
@@ -77,6 +77,10 @@ function parseArgs(argv) {
   }
 
   return { flags, positionals };
+}
+
+function normalizeArg(value) {
+  return String(value || '').replace(/^–+/, '--');
 }
 
 function setFlag(flags, key, value) {

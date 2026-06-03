@@ -6,6 +6,8 @@ const { legacySign, canonical } = require('./issuer');
 const { verificationKeys } = require('./keys');
 const { writeAuditEvidence } = require('../audit/evidence');
 const { isSubpath } = require('../utils');
+const { loadPolicyConfig } = require('../policy/config');
+const { isCapabilityRevoked } = require('./revocation');
 
 function verifyCapability(root, capability, expected = {}) {
   const result = checkCapability(root, capability, expected);
@@ -57,6 +59,7 @@ function checkCapability(root, capability, expected = {}) {
   if (capability.issuedBy !== 'agentguard') return denied('Capability issuer is not Agentguard.');
   const signature = verifySignature(root, capability);
   if (!signature.allowed) return signature;
+  if (isCapabilityRevoked(root, capability.capabilityId)) return denied('Capability is revoked.');
   const expiresAt = Date.parse(capability.expiresAt);
   if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) return denied('Capability is expired.');
   if (expected.sessionId && capability.sessionId !== expected.sessionId) return denied('Capability session scope does not match.');
@@ -69,7 +72,9 @@ function checkCapability(root, capability, expected = {}) {
 
 function verifySignature(root, capability) {
   if (!capability.signature) return denied('Capability signature is invalid.');
+  const policy = loadPolicyConfig(root);
   if (!capability.algorithm || capability.algorithm === 'hmac-sha256') {
+    if (policy.requireEd25519 || !policy.allowLegacyHmac) return denied('Legacy HMAC capabilities are disabled by policy.');
     return legacySign(root, capability) === capability.signature
       ? { allowed: true, warning: 'legacy_hmac_capability' }
       : denied('Capability signature is invalid.');

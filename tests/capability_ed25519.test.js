@@ -8,6 +8,7 @@ const os = require('os');
 const { issueCapability, legacySign } = require('../src/capabilities/issuer');
 const { verifyCapability } = require('../src/capabilities/verify');
 const { retireCapabilityKey, rotateCapabilityKey } = require('../src/capabilities/keys');
+const { revokeCapability } = require('../src/capabilities/revocation');
 
 test('ed25519 capability signature is accepted', () => {
   const dir = tempRoot();
@@ -71,6 +72,33 @@ test('legacy hmac capability works in compatibility mode and logs warning', () =
   assert.equal(result.allowed, true);
   assert.equal(result.warning, 'legacy_hmac_capability');
   assert.match(evidence(dir), /legacy_capability_used/);
+});
+
+test('revoked capability is denied', () => {
+  const dir = tempRoot();
+  const cap = issueCapability(dir, scoped(dir));
+  revokeCapability(dir, cap.capabilityId, { reason: 'test revoke' });
+  const result = verifyCapability(dir, cap, expected(dir));
+  assert.equal(result.allowed, false);
+  assert.match(result.reason, /revoked/i);
+  assert.match(evidence(dir), /capability_revoked/);
+});
+
+test('legacy hmac capability is denied when compatibility is disabled', () => {
+  const dir = tempRoot();
+  fs.writeFileSync(path.join(dir, 'agentkodex.policy.json'), JSON.stringify({ allowLegacyHmac: false }, null, 2));
+  const result = verifyCapability(dir, legacyCapability(dir), expected(dir));
+  assert.equal(result.allowed, false);
+  assert.match(result.reason, /Legacy HMAC/i);
+});
+
+test('policy path scope prevents issuing out-of-scope capability', () => {
+  const dir = tempRoot();
+  fs.mkdirSync(path.join(dir, 'allowed'));
+  fs.writeFileSync(path.join(dir, 'agentkodex.policy.json'), JSON.stringify({ pathScopes: ['allowed'] }, null, 2));
+  assert.throws(() => issueCapability(dir, scoped(dir)), /outside configured policy scope/);
+  const cap = issueCapability(dir, scoped(path.join(dir, 'allowed')));
+  assert.equal(verifyCapability(dir, cap, expected(path.join(dir, 'allowed'))).allowed, true);
 });
 
 function tempRoot() {

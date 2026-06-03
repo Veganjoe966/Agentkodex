@@ -23,7 +23,7 @@ function createAuditBundle(root, options = {}) {
   const governance = collectRunGovernance(root, target.run?.dir || null);
   const manifest = createManifest({ root, run: target.run, session: target.session, format, governance });
   addGitArtifacts(manifest, output.bundleDir, root, capability);
-  copyKnownArtifacts(manifest, output.bundleDir, target);
+  copyKnownArtifacts(manifest, output.bundleDir, target, root);
   const manifestPath = writeManifest(output.bundleDir, manifest);
   const zipPath = format === 'zip' ? zipBundle(root, output.bundleDir, output.zipPath, capability) : null;
 
@@ -64,7 +64,7 @@ function resolveOutput(root, target, options) {
   return { bundleDir: out, zipPath: null };
 }
 
-function copyKnownArtifacts(manifest, bundleDir, target) {
+function copyKnownArtifacts(manifest, bundleDir, target, root) {
   const runDir = target.run?.dir;
   const session = target.session;
   const files = [
@@ -82,6 +82,7 @@ function copyKnownArtifacts(manifest, bundleDir, target) {
     ['final_report', runDir && path.join(runDir, 'final-report.md')],
     ['changed_files_summary', runDir && path.join(runDir, 'diff.stat')],
     ['git_diff_patch', runDir && path.join(runDir, 'diff.patch')],
+    ['scorecard_snapshot', root && path.join(root, '.agentkodex', 'agents', 'scorecards.json')],
   ];
   for (const [role, source] of files) copyArtifact(manifest, bundleDir, role, source);
 }

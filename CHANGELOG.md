@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.0.2 - 2026-06-03
+
+### Added
+
+- Global npm postinstall PATH repair for users whose npm prefix bin directory is not on `PATH`.
+- Installer PATH repair that derives the npm global bin directory from `npm config get prefix`, updates shell profile setup when needed, and avoids the removed `npm bin -g` command.
+- Focused tests for PATH launcher repair and profile PATH setup.
+- Config-driven quality governance through `agentkodex.quality.json`.
+- Config-driven policy governance through `agentkodex.policy.json`.
+- Capability revocation list and legacy-HMAC policy controls.
+- Verifiable audit bundles with manifest bundle hashes and `agentkodex audit verify`.
+- Release gate command and `npm run release:gate`.
+- Expanded scorecard/routing quality metrics.
+- Security docs, Lintguard docs, Agentguard docs, release gate docs, CLI docs, and example quality/policy configs.
+
+### Validation
+
+- `npm test`: 87/87 passing.
+- `npm run lint`: passing.
+- `npm run typecheck`: passing.
+- `npm run quality:gate`: passing.
+- `npm run release:gate`: passing.
+
 ## 1.0.1 - 2026-06-03
 
 ### Added

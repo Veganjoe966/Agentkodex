@@ -7,6 +7,7 @@ const path = require('path');
 const os = require('os');
 const { runTask } = require('../src/run');
 const { createAuditBundle } = require('../src/audit/bundle');
+const { verifyAuditBundle } = require('../src/audit/verify');
 
 test('audit bundle writes manifest, summary, missing list, and redacts copied artifacts', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ak-audit-'));
@@ -21,4 +22,11 @@ test('audit bundle writes manifest, summary, missing list, and redacts copied ar
   const transcript = fs.readFileSync(path.join(bundle.dir, manifest.artifacts.find((item) => item.role === 'transcript').file), 'utf8');
   assert.doesNotMatch(transcript, /supersecret/);
   assert.match(transcript, /\[REDACTED\]/);
+  const verified = verifyAuditBundle(bundle.dir, { projectRoot: dir });
+  assert.equal(verified.ok, true);
+  assert.match(manifest.bundleHash, /^[a-f0-9]{64}$/);
+  fs.appendFileSync(path.join(bundle.dir, manifest.artifacts.find((item) => item.role === 'transcript').file), 'tamper\n');
+  const tampered = verifyAuditBundle(bundle.dir, { projectRoot: dir });
+  assert.equal(tampered.ok, false);
+  assert.match(tampered.errors.join('\n'), /hash mismatch|bundleHash mismatch/);
 });

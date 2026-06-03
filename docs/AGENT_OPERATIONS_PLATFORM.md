@@ -287,6 +287,28 @@ The integration must not add:
 - Dead-import detection is intentionally conservative and strongest for ordinary ES imports.
 - External agent CLIs can still emit sensitive data; Agentkodex redacts before logs, but upstream tools may also write their own files.
 
+## Production Gate Additions
+
+Agentkodex supports root-level config files:
+
+- `agentkodex.quality.json` for Lintguard budgets, command overrides, forbidden imports, banned packages, dependency hygiene, and architecture boundaries.
+- `agentkodex.policy.json` for default-deny behavior, path scopes, action patterns, capability TTL, Ed25519/HMAC compatibility, and broad execution permissions.
+
+Audit bundles are verifiable:
+
+```bash
+agentkodex audit bundle last
+agentkodex audit verify .agentkodex/audit/<bundle-id> --json
+```
+
+Release validation is one command:
+
+```bash
+npm run release:gate
+```
+
+See `docs/SECURITY_MODEL.md`, `docs/AGENTGUARD.md`, `docs/LINTGUARD.md`, `docs/RELEASE_GATE.md`, and `docs/CLI.md`.
+
 ## Roadmap
 
 Next integration step:

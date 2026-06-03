@@ -1,6 +1,7 @@
 'use strict';
 
 const { redactSecrets } = require('./security/redaction');
+const { configuredCommandDecision, loadPolicyConfig } = require('./policy/config');
 
 const BLOCKED_PATTERNS = [
   /\brm\s+-rf\s+\//i,
@@ -81,7 +82,8 @@ function policyAllows(command, options = {}) {
   const mode = normalizeMode(options.mode || 'supervised');
   const yes = Boolean(options.yes || options.autoApprove);
   const agentLaunch = Boolean(options.agentLaunch);
-  const classification = classifyCommand(command);
+  const policyConfig = loadPolicyConfig(options.root, options);
+  const classification = configuredCommandDecision(command, policyConfig) || classifyCommand(command);
 
   if (classification.risk === 'blocked') {
     return { allowed: false, requiresApproval: false, classification, reason: 'Blocked by Agentkodex command policy' };
@@ -107,6 +109,9 @@ function policyAllows(command, options = {}) {
   }
 
   if (classification.risk === 'unknown') {
+    if (policyConfig.defaultDeny) {
+      return { allowed: false, requiresApproval: true, classification, reason: 'Unknown command denied by default policy' };
+    }
     if (mode === 'trusted_auto' || mode === 'sandbox_auto' || yes) {
       return { allowed: true, requiresApproval: false, classification, reason: 'Unknown command allowed by mode or --yes' };
     }

@@ -27,7 +27,7 @@ test('cli help and version boot without missing imports', () => {
 
   const version = run(['version']);
   assert.equal(version.status, 0, version.stderr);
-  assert.match(version.stdout.trim(), /^1\.0\.1$/);
+  assert.match(version.stdout.trim(), /^1\.0\.2$/);
 });
 
 test('cli cockpit snapshot works without starting a long-lived server', () => {
@@ -44,4 +44,12 @@ test('cli approvals list includes open runtime approvals', () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, new RegExp(approval.id));
   assert.match(result.stdout, /open/);
+});
+
+test('cli policy check json emits machine-readable output', () => {
+  const result = run(['policy', 'check', '--json', 'npm run test']);
+  assert.equal(result.status, 0, result.stderr);
+  const parsed = JSON.parse(result.stdout);
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.command, 'npm run test');
 });

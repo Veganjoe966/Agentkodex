@@ -30,6 +30,13 @@ function routeTask(root, task) {
       completionBlocked: item.card.completionBlocked,
       approvalRequiredCount: item.card.approvalRequiredCount,
       unsafeActionAttemptCount: item.card.unsafeActionAttemptCount,
+      lintErrorCount: item.card.lintErrorCount,
+      typeErrorCount: item.card.typeErrorCount,
+      testFailureCount: item.card.testFailureCount,
+      complexityViolationCount: item.card.complexityViolationCount,
+      circularDependencyCount: item.card.circularDependencyCount,
+      deadImportCount: item.card.deadImportCount,
+      architectureViolationCount: item.card.architectureViolationCount,
     })),
   };
 }
@@ -44,10 +51,21 @@ function routeScore(card, category) {
   const approvalPenalty = Math.min(12, Number(card.approvalRequiredCount || 0) * 2);
   const qualityPenalty = Number(card.qualityViolationCount || 0) * 2 +
     (card.qualityGateOk === false ? 12 : 0) +
-    Number(card.completionBlockedCount || 0) * 8;
+    Number(card.completionBlockedCount || 0) * 8 +
+    namedQualityPenalty(card);
   const cleanReward = cleanGovernance(card) ? 8 : 0;
   const duration = card.avgDurationMs ? Math.min(10, 60000 / Math.max(card.avgDurationMs, 1)) : 0;
   return Math.round((success + gates + duration + cleanReward + categoryRuns * 5 - securityPenalty - approvalPenalty - qualityPenalty) * 100) / 100;
+}
+
+function namedQualityPenalty(card) {
+  return Number(card.lintErrorCount || 0) * 2 +
+    Number(card.typeErrorCount || 0) * 3 +
+    Number(card.testFailureCount || 0) * 4 +
+    Number(card.complexityViolationCount || 0) +
+    Number(card.circularDependencyCount || 0) * 2 +
+    Number(card.deadImportCount || 0) +
+    Number(card.architectureViolationCount || 0) * 3;
 }
 
 function cleanGovernance(card) {

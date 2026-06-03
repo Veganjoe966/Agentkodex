@@ -8,18 +8,24 @@ const { ensureDir, hashString } = require('../utils');
 const { defaultAgentguardPaths } = require('../agentguard/policy');
 const { activeSigningKey, signingKey } = require('./keys');
 const { writeAuditEvidence } = require('../audit/evidence');
+const { loadPolicyConfig } = require('../policy/config');
+const { isSubpath } = require('../utils');
 
 function issueCapability(root, input = {}) {
   ensureKodex(root);
   const now = Date.now();
-  const ttlMs = Number(input.ttlMs || 30 * 60 * 1000);
+  const policy = loadPolicyConfig(root, input);
+  const maxTtlMs = Number(policy.maxCapabilityTtlSeconds || 1800) * 1000;
+  const requestedTtlMs = Number(input.ttlMs || maxTtlMs);
+  const ttlMs = Math.min(requestedTtlMs, maxTtlMs);
+  const allowedPaths = normalizeAllowedPaths(root, input.allowedPaths, policy);
   const capability = {
     capabilityId: input.capabilityId || `cap_${hashString(`${now}:${Math.random()}:${input.agentId || ''}`, 16)}`,
     sessionId: String(input.sessionId || ''),
     agentId: String(input.agentId || ''),
     phase: String(input.phase || 'runtime'),
     allowedActions: normalizeList(input.allowedActions),
-    allowedPaths: normalizeList(input.allowedPaths),
+    allowedPaths,
     expiresAt: new Date(now + ttlMs).toISOString(),
     issuedBy: 'agentguard',
     algorithm: 'ed25519',
@@ -41,6 +47,17 @@ function issueCapability(root, input = {}) {
     keyId: issued.keyId,
   }, { runDir: input.runDir });
   return issued;
+}
+
+function normalizeAllowedPaths(root, paths, policy) {
+  const allowed = normalizeList(paths);
+  const scopes = normalizeList(policy.pathScopes).map((item) => path.resolve(root, item));
+  if (!scopes.length) return allowed;
+  for (const item of allowed) {
+    const resolved = path.resolve(item);
+    if (!scopes.some((scope) => isSubpath(scope, resolved))) throw new Error(`Capability path is outside configured policy scope: ${item}`);
+  }
+  return allowed;
 }
 
 function sign(root, capability) {

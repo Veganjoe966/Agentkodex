@@ -2,6 +2,9 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { classifyCommand, policyAllows, redactSecrets } = require('../src/policy');
 
 test('blocks destructive commands', () => {
@@ -37,4 +40,16 @@ test('redacts secret-looking values', () => {
   assert.doesNotMatch(redacted, /github_pat_/);
   assert.doesNotMatch(redacted, /npm_/);
   assert.doesNotMatch(redacted, /sk_live_/);
+});
+
+test('policy config can deny unknown and disabled command classes', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ak-policy-config-'));
+  fs.writeFileSync(path.join(root, 'agentkodex.policy.json'), JSON.stringify({
+    defaultDeny: true,
+    allowNetwork: false,
+    allowedActions: ['^npm run test$'],
+  }));
+  assert.equal(policyAllows('npm run test', { root, mode: 'sandbox_auto' }).allowed, true);
+  assert.equal(policyAllows('curl https://example.com', { root, mode: 'trusted_auto', yes: true }).allowed, false);
+  assert.equal(policyAllows('custom-tool does-something', { root, mode: 'trusted_auto', yes: true }).allowed, false);
 });

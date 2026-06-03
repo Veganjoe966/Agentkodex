@@ -90,6 +90,8 @@ Agentkodex now issues native Ed25519 capabilities by default. Capability metadat
 
 Governance evidence is written before denial returns. `agentkodex governance summary --json` reports the latest run's security, capability, quality, approval, unsafe-action, and completion-blocking fields.
 
+Runtime command launch honors `agentkodex.policy.json` path scopes, capability TTL, legacy-HMAC compatibility, and broad action controls. A command does not launch when capability verification, policy authorization, or security gates fail.
+
 ## Cockpit workflow
 
 ```bash
@@ -142,6 +144,12 @@ Audit bundle:
 .agentkodex/audit/<bundle-id>/summary.md
 .agentkodex/audit/<bundle-id>/redaction-report.json
 .agentkodex/audit/<bundle-id>/<redacted artifacts>
+```
+
+Verify a bundle:
+
+```bash
+agentkodex audit verify .agentkodex/audit/<bundle-id> --json
 ```
 
 ## Intelligence and orchestration

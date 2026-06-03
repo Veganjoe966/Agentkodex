@@ -4,6 +4,7 @@ const path = require('path');
 const { parseArgs, stringFlag } = require('../args');
 const { ensureKodex } = require('../kodexStore');
 const { createAuditBundle } = require('./bundle');
+const { verifyAuditBundle } = require('./verify');
 
 function cwdFromFlags(flags) {
   return path.resolve(stringFlag(flags, 'repo', stringFlag(flags, 'cwd', process.cwd())));
@@ -26,6 +27,28 @@ async function auditBundleCommand(argv) {
   console.log(`Summary: ${result.summaryPath}`);
 }
 
+async function auditCommand(argv) {
+  const [sub = 'bundle', ...rest] = argv;
+  if (sub === 'bundle') return auditBundleCommand(rest);
+  if (sub === 'verify') return auditVerifyCommand(rest);
+  throw new Error(`Unknown audit subcommand: ${sub}`);
+}
+
+async function auditVerifyCommand(argv) {
+  const { flags, positionals } = parseArgs(argv);
+  const root = cwdFromFlags(flags);
+  const bundleDir = positionals[0] || stringFlag(flags, 'bundle', stringFlag(flags, 'dir', ''));
+  if (!bundleDir) throw new Error('Missing bundle directory. Example: agentkodex audit verify .agentkodex/audit/<id>');
+  const result = verifyAuditBundle(bundleDir, { projectRoot: root });
+  if (flags.json !== undefined) console.log(JSON.stringify(result, null, 2));
+  else {
+    console.log(result.summary);
+    for (const error of result.errors) console.log(`- error: ${error}`);
+    for (const warning of result.warnings) console.log(`- warning: ${warning}`);
+  }
+  if (!result.ok) process.exitCode = 1;
+}
+
 function rawFlagValue(argv, name) {
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === `--${name}`) return argv[i + 1] && !argv[i + 1].startsWith('-') ? argv[i + 1] : '';
@@ -35,5 +58,6 @@ function rawFlagValue(argv, name) {
 }
 
 module.exports = {
+  auditCommand,
   auditBundleCommand,
 };

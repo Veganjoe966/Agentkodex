@@ -1,12 +1,12 @@
-# Agentkodex v1.0.1 Validation Report
+# Agentkodex v1.0.2 Validation Report
 
 Validated on: 2026-06-03  
 Runtime used for validation: Node.js v20.18.1  
-Package: `agentkodex@1.0.1`
+Package: `agentkodex@1.0.2`
 
 ## Summary
 
-Local validation passed for the production CLI harness, Runtime v2 sessions, scoped Agentguard capabilities, Ed25519 key CLI, Ed25519 capability migration, governance summaries, audit bundle evidence, Agentkodex quality gate, Lintguard advanced checks, Lintguard adapter gate, intelligence layer, routing, scorecards, tournaments, swarm execution, policy, discovery, gates, installer animation, and Cockpit snapshot mode.
+Local validation passed for the production CLI harness, Runtime v2 sessions, scoped Agentguard capabilities, Ed25519 key CLI, capability revocation, Ed25519 capability migration, governance summaries, verifiable audit bundles, Agentkodex quality gate, Lintguard advanced checks, policy config, release gate, routing, scorecards, tournaments, swarm execution, discovery, gates, installer PATH repair, and Cockpit hardening.
 
 ## Commands Run
 
@@ -30,8 +30,8 @@ Result:
 
 ```text
 1..75
-# tests 75
-# pass 75
+# tests 87
+# pass 87
 # fail 0
 ```
 
@@ -49,6 +49,9 @@ Capability enforcement coverage:
 - Key CLI supports `status`, `list --json`, `rotate --json`, and `retire`.
 - Retired Ed25519 keys no longer verify existing capabilities.
 - Corrupt key stores fail safely and key rotation failure writes audit evidence.
+- Revoked capabilities are denied.
+- Legacy HMAC capabilities are denied when compatibility is disabled in `agentkodex.policy.json`.
+- Policy path scopes prevent issuing out-of-scope capabilities.
 
 Key CLI validation:
 
@@ -82,21 +85,24 @@ Package dry run:
 npm pack --dry-run --json
 ```
 
-Result: passed. The package includes `install.sh` with executable mode and excludes `tests/`. The installer includes an ASCII Agentkodex banner and interactive install animation while preserving real npm failure output.
+Result: passed. The package includes `install.sh`, postinstall PATH repair helpers, docs, examples, and source modules while excluding `tests/`.
+
+Release gate:
+
+```bash
+npm run release:gate
+```
+
+Result: passed. The release gate ran `npm test`, `npm run lint`, `npm run typecheck`, `npm run quality:gate`, policy check, repo hygiene scan, audit bundle verification, temporary package install smoke, and CLI smoke checks.
 
 NPM publish:
 
-```bash
-npm view agentkodex@1.0.1 version --json
-npm publish --access public
-```
-
-Result: published `agentkodex@1.0.1` to the npm registry and verified the registry reports `latest` as `1.0.1`. Publishing used a temporary npm user config that was removed immediately after the command.
+Result: not run for `1.0.2` during this hardening pass.
 
 Agentguard bridge smoke:
 
 ```bash
-python3 -m py_compile /root/agentguard/Agentguard/agentguard/bridge.py
+python3 -m py_compile "$AGENTGUARD_SOURCE/agentguard/bridge.py"
 npm test
 ```
 
@@ -110,6 +116,15 @@ agentkodex gates run --gates lintguard --quiet
 ```
 
 Result: Lintguard emitted machine-readable JSON. Focused tests verified sidecar token rejection, valid-token checks, clean local passes, and blocking local lint failures.
+
+Audit bundle CLI:
+
+```bash
+node bin/agentkodex.js audit bundle --cwd "$TMP" last
+node bin/agentkodex.js audit verify --cwd "$TMP" "$BUNDLE" --json
+```
+
+Result: passed. The bundle manifest included a `bundleHash`, artifacts had SHA-256 hashes, and verification returned `ok: true`.
 
 CLI boot:
 

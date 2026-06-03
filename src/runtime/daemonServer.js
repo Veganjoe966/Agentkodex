@@ -23,6 +23,8 @@ const {
 const { createApproval, listApprovals, resolveApproval, updateApproval } = require('./approvalQueue');
 const { detectState, detectApprovalRequest, parseEventsFromOutput } = require('./stateDetector');
 const { authorizeDaemonStart, assertDaemonRuntimeCapability } = require('./daemonSecurity');
+const { createRequestGuard } = require('./requestGuard');
+const { writeAuditEvidence } = require('../audit/evidence');
 
 class AgentkodexDaemon {
   constructor(root, options = {}) {
@@ -34,6 +36,7 @@ class AgentkodexDaemon {
     this.server = null;
     this.options = options;
     this.token = ensureDaemonToken(this.root);
+    this.requestGuard = createRequestGuard();
   }
 
   async start() {
@@ -92,6 +95,8 @@ class AgentkodexDaemon {
         const response = await this.handleRequest(request);
         socket.write(`${JSON.stringify({ ok: true, response })}\n`);
       } catch (error) {
+        this.requestGuard.record(error);
+        writeAuditEvidence(this.root, { type: 'daemon_request_denied', allowed: false, reason: sanitizeError(error) });
         this.log(`request error ${redactSecrets(error && error.stack ? error.stack : String(error))}`);
         socket.write(`${JSON.stringify({ ok: false, error: sanitizeError(error) })}\n`);
       } finally {
@@ -101,6 +106,8 @@ class AgentkodexDaemon {
   }
 
   async handleRequest(request) {
+    this.requestGuard.assert();
+    this.requestGuard.validate(request);
     assertDaemonToken(this.root, request);
     const type = request.type;
     if (type === 'ping') return { pid: process.pid, root: this.root, socketPath: this.socketPath, sessions: this.children.size };

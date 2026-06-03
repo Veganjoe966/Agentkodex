@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('path');
+const crypto = require('crypto');
 const { writeJson, writeText } = require('../utils');
 
 function createManifest(input) {
@@ -24,6 +25,8 @@ function createManifest(input) {
     completionBlocked: governance.completionBlocked,
     approvalRequiredCount: governance.approvalRequiredCount,
     unsafeActionAttemptCount: governance.unsafeActionAttemptCount,
+    redactionApplied: true,
+    bundleHash: '',
     governance,
     artifacts: [],
     missing: [],
@@ -64,11 +67,26 @@ function recordSkipped(manifest, role, source, reason) {
 }
 
 function writeManifest(bundleDir, manifest) {
+  manifest.bundleHash = computeBundleHash(manifest);
   const manifestPath = path.join(bundleDir, 'manifest.json');
   writeJson(manifestPath, manifest);
   writeText(path.join(bundleDir, 'summary.md'), renderSummary(manifest));
   writeJson(path.join(bundleDir, 'redaction-report.json'), manifest.redaction);
   return manifestPath;
+}
+
+function computeBundleHash(manifest) {
+  const payload = {
+    version: manifest.version,
+    runId: manifest.runId,
+    sessionId: manifest.sessionId,
+    governance: manifest.governance,
+    artifacts: manifest.artifacts.map((item) => ({ role: item.role, file: item.file, sha256: item.sha256, bytes: item.bytes })),
+    missing: manifest.missing,
+    skipped: manifest.skipped,
+    redaction: manifest.redaction,
+  };
+  return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
 
 function renderSummary(manifest) {
@@ -108,4 +126,5 @@ module.exports = {
   recordSkipped,
   writeManifest,
   renderSummary,
+  computeBundleHash,
 };

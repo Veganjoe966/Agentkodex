@@ -13,7 +13,7 @@ const { createTaskBrief, createPlan } = require('./prompts');
 const { daemonCommand, sessionCommand, approvalsCommand } = require('./runtimeCli');
 const { cockpitCommand } = require('./cockpit');
 const { gatesCommand } = require('./gatesCli');
-const { auditBundleCommand } = require('./audit/command');
+const { auditBundleCommand, auditCommand } = require('./audit/command');
 const { helpText } = require('./help');
 const { intelligenceCommand } = require('./intelligence/command');
 const { routeCommand } = require('./router/command');
@@ -25,6 +25,8 @@ const { lintguardCommand } = require('./lintguard/command');
 const { qualityCommand } = require('./gates/qualityCommand');
 const { governanceCommand } = require('./governance/command');
 const { keysCommand } = require('./keys/command');
+const { policyCommand } = require('./policy/command');
+const { releaseCommand } = require('./release/command');
 
 async function main(argv) {
   const [command = 'help', ...rest] = argv;
@@ -50,6 +52,8 @@ async function main(argv) {
       return governanceCommand(rest);
     case 'audit-bundle':
       return auditBundleCommand(rest);
+    case 'audit':
+      return auditCommand(rest);
     case 'intelligence':
       return intelligenceCommand(rest);
     case 'route':
@@ -84,6 +88,8 @@ async function main(argv) {
       return agentsCommand(rest);
     case 'policy':
       return policyCommand(rest);
+    case 'release':
+      return releaseCommand(rest);
     case 'suggest':
       return suggestCommand(rest);
     case 'plan':
@@ -256,19 +262,6 @@ async function agentsCommand(argv) {
   }
 
   throw new Error(`Unknown agents subcommand: ${sub}`);
-}
-
-async function policyCommand(argv) {
-  const { classifyCommand, policyAllows } = require('./policy');
-  const { authorizeCommand } = require('./authorization');
-  const { flags, positionals } = parseArgs(argv);
-  const root = cwdFromFlags(flags);
-  const command = positionals.join(' ') || stringFlag(flags, 'command', '');
-  if (!command) throw new Error('Missing command to classify.');
-  const classification = classifyCommand(command);
-  const decision = policyAllows(command, { mode: stringFlag(flags, 'mode', 'supervised'), yes: booleanFlag(flags, 'yes') });
-  const authorization = authorizeCommand(command, { root, mode: stringFlag(flags, 'mode', 'supervised'), yes: booleanFlag(flags, 'yes') });
-  console.log(JSON.stringify({ command, classification, decision, authorization }, null, 2));
 }
 
 async function suggestCommand(argv) {

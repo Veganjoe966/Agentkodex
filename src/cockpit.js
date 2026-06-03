@@ -7,6 +7,7 @@ const { parseArgs, stringFlag, booleanFlag, listFlag } = require('./args');
 const { ensureKodex, kodexPath } = require('./kodexStore');
 const { readText, readJson } = require('./utils');
 const { sanitizeError } = require('./security/controlPlane');
+const { writeAuditEvidence } = require('./audit/evidence');
 const { assertSafeBind, createCockpitAuth, rejectUnauthorized } = require('./cockpitAuth');
 const {
   sendToSession,
@@ -115,13 +116,15 @@ async function handleSessionRoute(root, req, res, id, action, url) {
   }
   if (req.method === 'POST' && action === 'send') {
     const body = await readBody(req);
+    auditCockpitAction(root, 'session:send', id);
     return json(res, { ok: true, result: await sendToSession(root, id, body.text || body.message || '', { newline: body.newline !== false }) });
   }
-  if (req.method === 'POST' && action === 'interrupt') return json(res, { ok: true, result: await interruptSession(root, id) });
-  if (req.method === 'POST' && action === 'kill') return json(res, { ok: true, result: await killSession(root, id) });
-  if (req.method === 'POST' && action === 'close-stdin') return json(res, { ok: true, result: await closeSessionStdin(root, id) });
+  if (req.method === 'POST' && action === 'interrupt') { auditCockpitAction(root, 'session:interrupt', id); return json(res, { ok: true, result: await interruptSession(root, id) }); }
+  if (req.method === 'POST' && action === 'kill') { auditCockpitAction(root, 'session:kill', id); return json(res, { ok: true, result: await killSession(root, id) }); }
+  if (req.method === 'POST' && action === 'close-stdin') { auditCockpitAction(root, 'stdin:close', id); return json(res, { ok: true, result: await closeSessionStdin(root, id) }); }
   if (req.method === 'POST' && action === 'finalize') {
     const body = await readBody(req);
+    auditCockpitAction(root, 'session:finalize', id);
     return json(res, {
       ok: true,
       result: await finalizeSession(root, id, {
@@ -139,6 +142,7 @@ async function handleApprovalDecision(root, req, res, id, action) {
   const body = await readBody(req);
   const approval = resolveApproval(root, id);
   if (!approval) return notFound(res);
+  auditCockpitAction(root, `approval:${action}`, approval.sessionId || id);
   let result;
   if (approval.sessionId) {
     result = action === 'approve'
@@ -148,6 +152,10 @@ async function handleApprovalDecision(root, req, res, id, action) {
     result = { approval: markApproval(root, approval.id, action === 'approve' ? 'approved' : 'denied') };
   }
   return json(res, { ok: true, result });
+}
+
+function auditCockpitAction(root, action, target) {
+  writeAuditEvidence(root, { type: 'cockpit_action', allowed: true, action, target });
 }
 
 function snapshot(root) {

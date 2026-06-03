@@ -29,8 +29,11 @@ Usage:
   agentkodex status [last|run-id] [--json]
   agentkodex report [last|run-id]
   agentkodex audit-bundle [last|run-id] [--run id] [--session id] [--out dir] [--format dir|zip]
+  agentkodex audit bundle [last|run-id]
+  agentkodex audit verify <bundle-dir> [--json]
   agentkodex agents list|detect|set|scorecards
-  agentkodex policy "command to classify"
+  agentkodex policy check ["command to classify"] [--json]
+  agentkodex release gate [--json]
   agentkodex kodex show
   agentkodex doctor
 

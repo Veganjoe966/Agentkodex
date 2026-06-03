@@ -1,0 +1,16 @@
+{
+  "defaultDeny": false,
+  "dangerousActions": [],
+  "allowedActions": [],
+  "deniedActions": [],
+  "pathScopes": [],
+  "approvalRequiredActions": [],
+  "maxCapabilityTtlSeconds": 1800,
+  "allowLegacyHmac": true,
+  "requireEd25519": false,
+  "allowShell": true,
+  "allowNetwork": true,
+  "allowFileWrite": true,
+  "allowGitWrite": true,
+  "allowProcessKill": true
+}

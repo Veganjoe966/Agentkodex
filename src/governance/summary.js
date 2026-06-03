@@ -44,6 +44,7 @@ function blocksCompletion(governance = {}) {
     governance.completionBlocked ||
     Number(governance.failedCapabilityCount || 0) > 0 ||
     Number(governance.securityDeniedCount || 0) > 0 ||
+    Number(governance.approvalRequiredCount || 0) > 0 ||
     governance.qualityGateOk === false
   );
 }

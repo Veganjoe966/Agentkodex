@@ -332,7 +332,7 @@ function renderQaReport(qa) {
 
 function decideFinalStatus({ agentRun, gateResults, security, gates, governance = {} }) {
   if (agentRun.error) return 'failed_agent';
-  if (Number(governance.failedCapabilityCount || 0) > 0 || Number(governance.securityDeniedCount || 0) > 0) return 'failed_security';
+  if (Number(governance.failedCapabilityCount || 0) > 0 || Number(governance.securityDeniedCount || 0) > 0 || Number(governance.approvalRequiredCount || 0) > 0) return 'failed_security';
   if (governance.qualityGateOk === false || governance.completionBlocked) return 'failed_gates';
   if (agentRun.result?.capability?.allowed === false) return 'failed_security';
   if (agentRun.result && agentRun.result.policy && agentRun.result.skipped && agentRun.result.policy.allowed === false) return 'failed_agent_policy';

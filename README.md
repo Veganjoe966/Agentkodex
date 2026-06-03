@@ -15,9 +15,11 @@ Agentkodex now includes direct execution-path capability enforcement:
 - New capabilities are signed with native Ed25519 keys under `.agentkodex/runtime/`, with multiple verification keys and HMAC compatibility-mode warnings during migration.
 - Failed capability checks, denied actions, security decisions, quality gate results, legacy capability use, and key rotations are written as audit evidence.
 - Audit bundles include governance fields and run-local evidence when available.
+- Audit bundles can be verified with `agentkodex audit verify <bundle-dir> --json`.
 - Routing and scorecards track `securityAllowed`, `securityDeniedCount`, `failedCapabilityCount`, `qualityGateOk`, `qualityViolationCount`, `completionBlocked`, `approvalRequiredCount`, and `unsafeActionAttemptCount`.
 - `agentkodex governance summary --json` shows machine-readable governance status for the latest run or aggregate root evidence.
 - The regression suite includes `runtime execution path denies command without valid capability`.
+- `agentkodex.quality.json`, `agentkodex.policy.json`, and `npm run release:gate` provide local-first production gates.
 
 ## One-command install
 
@@ -27,11 +29,19 @@ Recommended npm install:
 npm install -g agentkodex@latest
 ```
 
+The npm package includes a global postinstall check that repairs common PATH issues without `sudo`. If npm installs Agentkodex into a global prefix that is not on your shell PATH, it creates a safe launcher where possible or adds the npm bin directory to your shell profile.
+
 Then verify:
 
 ```bash
 agentkodex --help
 agentkodex doctor
+```
+
+If a locked-down shell still cannot find the command immediately, this always works:
+
+```bash
+npx -y agentkodex@latest doctor
 ```
 
 One-shot installer:
@@ -40,7 +50,7 @@ One-shot installer:
 curl -fsSL https://raw.githubusercontent.com/Veganjoe966/Agentkodex/main/install.sh | sh
 ```
 
-The one-shot installer uses npm first. If the npm registry package is unavailable, it falls back to `npm install -g github:Veganjoe966/Agentkodex#main`. It never runs `sudo`; if global npm permissions are not configured, fix your npm prefix or use a Node version manager.
+The one-shot installer uses npm first, shows an interactive install animation, repairs common npm PATH issues, and falls back to `npm install -g github:Veganjoe966/Agentkodex#main` if the npm registry package is unavailable. It never runs `sudo`.
 
 Install from GitHub explicitly:
 
@@ -77,7 +87,10 @@ Implemented capabilities:
 - Optional first-party Agentguard capability bridge for signed command authorization before execution.
 - Scoped Agentguard-compatible capabilities enforced at command launch boundaries.
 - Agent operations gates: `agentkodex quality check` for completion quality and an Agentguard-compatible security gate interface.
+- Config-driven Lintguard governance through `agentkodex.quality.json`.
+- Config-driven Agentguard policy through `agentkodex.policy.json`.
 - Optional Lintguard sidecar quality gate via `agentkodex lintguard check`.
+- Release validation through `npm run release:gate`.
 - Secret redaction in logs.
 - Test suite covering discovery, policy, one-shot runs, Runtime v2 sessions, daemon compatibility, Cockpit API, and command execution.
 

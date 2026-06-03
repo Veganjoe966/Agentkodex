@@ -13,11 +13,11 @@ function runAdvancedChecks(root, files, options = {}) {
   const jsFiles = files.filter((file) => JS_EXTENSIONS.has(path.extname(file).toLowerCase()));
   const config = options.quality || options.config?.qualityGate || {};
   return [
-    complexityCheck(root, jsFiles, Number(options.maxComplexity || config.maxComplexity || 60)),
-    circularDepsCheck(root, jsFiles),
-    deadImportsCheck(root, jsFiles, options.unusedImportsMode || config.unusedImports || 'warn'),
-    dependencyHygieneCheck(root, jsFiles, options.bannedPackages || config.bannedPackages || DEFAULT_BANNED),
-    architectureBoundariesCheck(root, jsFiles, options.forbiddenImportMap || config.forbiddenImportMap || {}),
+    complexityCheck(root, jsFiles, Number(config.maxFunctionComplexity || options.maxComplexity || config.maxComplexity || 60)),
+    circularDepsCheck(root, jsFiles, config.failOnCircularDeps !== false),
+    deadImportsCheck(root, jsFiles, config.failOnDeadImports || options.unusedImportsMode === 'fail'),
+    dependencyHygieneCheck(root, jsFiles, config),
+    architectureBoundariesCheck(root, jsFiles, config.architectureBoundaries || options.forbiddenImportMap || config.forbiddenImportMap || {}),
   ];
 }
 
@@ -33,7 +33,7 @@ function complexityCheck(root, files, max) {
   return check('complexity', details.length === 0, details.length, 0, details);
 }
 
-function circularDepsCheck(root, files) {
+function circularDepsCheck(root, files, fail = true) {
   const graph = dependencyGraph(root, files);
   const cycles = [];
   for (const node of graph.keys()) visit(node, [], new Set());
@@ -48,10 +48,10 @@ function circularDepsCheck(root, files) {
     seen.add(node);
     for (const next of graph.get(node) || []) visit(next, stack.concat(node), seen);
   }
-  return check('circular-deps', cycles.length === 0, cycles.length, 0, cycles);
+  return check('circular-deps', !fail || cycles.length === 0, fail ? cycles.length : 0, fail ? 0 : cycles.length, cycles);
 }
 
-function deadImportsCheck(root, files, mode) {
+function deadImportsCheck(root, files, failMode) {
   const details = [];
   for (const file of files) {
     const text = read(file);
@@ -62,31 +62,52 @@ function deadImportsCheck(root, files, mode) {
       }
     }
   }
-  const fail = mode === 'fail' && details.length > 0;
+  const fail = Boolean(failMode) && details.length > 0;
   return check('dead-imports', !fail, fail ? details.length : 0, fail ? 0 : details.length, details);
 }
 
-function dependencyHygieneCheck(root, files, banned) {
+function dependencyHygieneCheck(root, files, config = {}) {
   const packageJson = readJson(path.join(root, 'package.json'), {});
+  const duplicateDetails = duplicateDependencies(packageJson);
   const declared = new Set(Object.keys({
     ...(packageJson.dependencies || {}),
     ...(packageJson.devDependencies || {}),
     ...(packageJson.peerDependencies || {}),
     ...(packageJson.optionalDependencies || {}),
   }));
-  const bannedList = Array.isArray(banned) ? banned : DEFAULT_BANNED;
+  const bannedList = Array.isArray(config.bannedPackages) ? config.bannedPackages : DEFAULT_BANNED;
   const errors = [];
   const warnings = [];
+  for (const detail of duplicateDetails) errors.push(detail);
   for (const file of files) {
     for (const spec of importSpecs(read(file))) {
       if (spec.startsWith('.') || spec.startsWith('/')) continue;
       const pkg = packageName(spec);
       if (spec.startsWith('node:') || BUILTINS.has(pkg) || BUILTINS.has(spec)) continue;
       if (bannedList.some((item) => pkg === item || spec.startsWith(`${item}/`))) errors.push(`${path.relative(root, file)} imports banned package ${pkg}`);
-      else if (!declared.has(pkg)) warnings.push(`${path.relative(root, file)} imports missing dependency ${pkg}`);
+      else if (!declared.has(pkg)) {
+        const detail = `${path.relative(root, file)} imports missing dependency ${pkg}`;
+        if (config.failOnMissingDeps) errors.push(detail);
+        else warnings.push(detail);
+      }
     }
   }
   return check('dependency-hygiene', errors.length === 0, errors.length, warnings.length, errors.concat(warnings));
+}
+
+function duplicateDependencies(packageJson) {
+  const sections = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
+  const owners = new Map();
+  for (const section of sections) {
+    for (const name of Object.keys(packageJson[section] || {})) {
+      const list = owners.get(name) || [];
+      list.push(section);
+      owners.set(name, list);
+    }
+  }
+  return [...owners.entries()]
+    .filter(([, sectionsForName]) => sectionsForName.length > 1)
+    .map(([name, sectionsForName]) => `duplicate dependency ${name} in ${sectionsForName.join(', ')}`);
 }
 
 function architectureBoundariesCheck(root, files, map) {

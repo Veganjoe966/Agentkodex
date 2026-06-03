@@ -9,12 +9,9 @@ const { scopedFiles, isEnvFile } = require('./fileScope');
 const { issueQualityCapability } = require('../capabilities/phases');
 const { writeAuditEvidence } = require('../audit/evidence');
 const { runAdvancedChecks } = require('./advancedChecks');
-
-const DEFAULT_MAX_LINES = 400;
-const FORBIDDEN_IMPORTS = [
-  { name: 'posthog', pattern: /\b(?:import\s+.*from\s+['"]posthog[^'"]*['"]|require\(['"]posthog[^'"]*['"]\))/i },
-  { name: '@emergentbase', pattern: /\b(?:import\s+.*from\s+['"]@emergentbase\/[^'"]+['"]|require\(['"]@emergentbase\/[^'"]+['"]\))/i },
-];
+const { redactSecrets } = require('../security/redaction');
+const { commandOverrides, forbiddenImportRules, loadQualityConfig } = require('./qualityConfig');
+const BANNED_ABSOLUTE_PROJECT_PATH = new RegExp(`${escapeRegExp('/app')}/${escapeRegExp('test_project')}\\b`);
 
 async function runQualityGate(options = {}) {
   const root = path.resolve(options.projectRoot || options.root || process.cwd());
@@ -22,23 +19,28 @@ async function runQualityGate(options = {}) {
   const files = scopedFiles(root, options.changedFiles || options.files || []);
   const logDir = options.logDir || path.join(root, '.agentkodex', 'quality-gate');
   ensureDir(logDir);
+  const qualityConfig = loadQualityConfig(root, options);
   const capability = options.capability || issueQualityCapability(root, { sessionId: options.sessionId, runId: options.runId, cwd: root, runDir: options.runDir });
 
   const checks = [];
-  for (const spec of commandSpecs(discovery)) {
+  for (const spec of commandSpecs(discovery, qualityConfig)) {
     checks.push(await runCommandCheck(root, spec, { ...options, logDir, capability }));
   }
-  checks.push(runLocCheck(root, files, Number(options.maxFileLines || DEFAULT_MAX_LINES)));
-  checks.push(runArchitectureCheck(root, files, options.forbiddenImports || FORBIDDEN_IMPORTS));
-  checks.push(...runAdvancedChecks(root, files, options));
+  checks.push(runLocCheck(root, files, qualityConfig.maxFileLoc));
+  checks.push(runArchitectureCheck(root, files, forbiddenImportRules(qualityConfig)));
+  checks.push(...runAdvancedChecks(root, files, { ...options, quality: qualityConfig }));
+  checks.push(runSecretLogCheck(logDir));
+  checks.push(runTotalViolationCheck(checks, qualityConfig.maxTotalViolations));
 
   const failed = checks.find((check) => !check.ok);
+  const totals = totalsFor(checks, files);
   const result = {
     ok: !failed,
     summary: failed ? `Quality gate failed: ${failed.name}` : 'Quality gate passed.',
     checks,
     filesChecked: files.map((file) => path.relative(root, file)).sort(),
     blockedReason: failed ? failed.details[0] || `${failed.name} failed` : null,
+    totals,
   };
   writeAuditEvidence(root, {
     type: 'quality_gate_result',
@@ -69,14 +71,17 @@ async function runQualityGateAsGate(root, outputDir, options = {}) {
   };
 }
 
-function commandSpecs(discovery) {
+function commandSpecs(discovery, qualityConfig = {}) {
   const commands = discovery.commands || [];
-  return [
+  const overrides = commandOverrides(qualityConfig);
+  const discovered = [
     findSpec(commands, 'eslint', (cmd) => cmd.name === 'lint' || /(^|\s)eslint(\s|$)/i.test(cmd.evidence || cmd.command || '')),
     findSpec(commands, 'typecheck', (cmd) => /type-?check/i.test(cmd.name) || /\btsc\b.*--noEmit/i.test(`${cmd.evidence} ${cmd.command}`)),
     findSpec(commands, 'ruff', (cmd) => /\bruff\s+check\b/i.test(cmd.command || '')),
     findSpec(commands, 'tests', (cmd) => cmd.name === 'test' || cmd.category === 'test'),
   ].filter(Boolean);
+  const overridden = new Set(overrides.map((item) => item.name));
+  return overrides.concat(discovered.filter((item) => !overridden.has(item.name)));
 }
 
 function findSpec(commands, name, predicate) {
@@ -131,6 +136,7 @@ function runArchitectureCheck(root, files, forbiddenImports) {
       continue;
     }
     const text = fs.readFileSync(file, 'utf8');
+    if (BANNED_ABSOLUTE_PROJECT_PATH.test(text)) details.push(`${rel} contains hardcoded banned project path`);
     for (const item of forbiddenImports) {
       if (item.pattern.test(text)) details.push(`${rel} imports forbidden package ${item.name}`);
     }
@@ -138,8 +144,47 @@ function runArchitectureCheck(root, files, forbiddenImports) {
   return check('architecture', details.length === 0, details.length, 0, details);
 }
 
+function runSecretLogCheck(logDir) {
+  const details = [];
+  for (const file of safeLogFiles(logDir)) {
+    const text = fs.readFileSync(file, 'utf8');
+    if (redactSecrets(text) !== text) details.push(`${path.relative(logDir, file)} contains unredacted secret-looking output`);
+  }
+  return check('secret-output', details.length === 0, details.length, 0, details);
+}
+
+function safeLogFiles(dir) {
+  try {
+    return fs.readdirSync(dir)
+      .filter((name) => /\.(?:log|txt|json)$/i.test(name))
+      .map((name) => path.join(dir, name))
+      .filter((file) => fs.statSync(file).isFile());
+  } catch (_) {
+    return [];
+  }
+}
+
+function runTotalViolationCheck(checks, max) {
+  if (max === null || max === undefined || !Number.isFinite(Number(max))) return check('total-violations', true, 0, 0, []);
+  const totals = totalsFor(checks, []);
+  const ok = totals.errors + totals.warnings <= Number(max);
+  return check('total-violations', ok, ok ? 0 : 1, 0, ok ? [] : [`total violations ${totals.errors + totals.warnings} exceeds ${max}`]);
+}
+
+function totalsFor(checks, files) {
+  return {
+    errors: checks.reduce((sum, item) => sum + Number(item.errors || 0), 0),
+    warnings: checks.reduce((sum, item) => sum + Number(item.warnings || 0), 0),
+    filesChecked: files.length,
+  };
+}
+
 function check(name, ok, errors, warnings, details) {
   return { name, ok, errors, warnings, details };
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 module.exports = {
